@@ -1,0 +1,62 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.env
+.env.*
+!.env.example
+volumes/*
+!volumes/.gitkeep
+hs_err_pid*.log
+*.log
+uploads
+venv/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+*.pyc
+*.bak
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Java build ###
+*.class
+.java-version
+
+### Database ###
+*.db
+*.db-shm
+*.db-wal
+volumes/backups/
+backups/*
+
+### Plots ###
+testoutput/
+
+volumes/data.json
+bathroom_cleaned.csv
+bathroom_summary.csv
