@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment Tracker V2</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 24px;
+            background: #111;
+            color: #eee;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        .hint {
+            color: #a8a8a8;
+            margin-bottom: 16px;
+        }
+
+        .actions {
+            margin-bottom: 16px;
+        }
+
+        .create-form {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(180px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .create-form input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background: #171717;
+            color: #eee;
+        }
+
+        .create-form textarea {
+            width: 100%;
+            min-height: 90px;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background: #171717;
+            color: #eee;
+        }
+
+        button {
+            background: #2f7df6;
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+
+        .link-btn {
+            display: inline-block;
+            background: #2f7df6;
+            color: #fff;
+            border-radius: 6px;
+            padding: 6px 10px;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1b1b1b;
+        }
+
+        th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #222;
+        }
+
+        .status {
+            margin-top: 10px;
+            color: #c5c5c5;
+            min-height: 22px;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .view-toggle button {
+            flex: 1;
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        .view-toggle button.active {
+            background: #1f7f3f;
+        }
+
+        .view-toggle button:not(.active) {
+            background: #333;
+            opacity: 0.6;
+        }
+
+        #jsonViewer {
+            display: none;
+            margin-top: 16px;
+        }
+
+        #jsonViewer.active {
+            display: block;
+        }
+
+        #tableView.hidden {
+            display: none;
+        }
+
+        .json-toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .json-toolbar select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #171717;
+            color: #eee;
+        }
+
+        #jsonContainer {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .json-key {
+            color: #9cdcfe;
+        }
+
+        .json-string {
+            color: #ce9178;
+        }
+
+        .json-number {
+            color: #b5cea8;
+        }
+
+        .json-boolean {
+            color: #569cd6;
+        }
+
+        .json-null {
+            color: #569cd6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Assignment Tracker V2</h1>
+    <div class="hint">Minimal page for debugging. URL: /mvc/assignments/tracker-v2</div>
+    <div class="hint">Note: if a file resource is uploaded after a URL resource, the assignment switches to file and URL becomes blank by design.</div>
+
+    <form class="create-form" method="post" action="/mvc/assignments/tracker-v2/create">
+        <input name="name" type="text" placeholder="Assignment name" required>
+        <input name="type" type="text" placeholder="Type" required>
+        <input name="description" type="text" placeholder="Description">
+        <textarea name="aiRubric" placeholder="AI grading rubric (optional; uses the generic 1-5 rubric when blank)"></textarea>
+        <input name="points" type="number" step="0.01" placeholder="Points" required>
+        <input name="dueDate" type="date" required>
+        <button type="submit">Create Assignment</button>
+    </form>
+
+    <div class="actions">
+        <a href="/mvc/assignments/tracker-v2"><button type="button">Reload Assignments</button></a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Resource Type</th>
+                <th>Resource Filename</th>
+                <th>Resource URL</th>
+                <th>Storage Path</th>
+                <th>Uploaded By</th>
+                <th>Resource Access</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="assignment : ${assignments}">
+                <td th:text="${assignment.id}"></td>
+                <td th:text="${assignment.name}"></td>
+                <td th:text="${assignment.type}"></td>
+                <td th:text="${assignment.resourceType}"></td>
+                <td th:text="${assignment.resourceFilename}"></td>
+                <td th:text="${assignment.resourceUrl}"></td>
+                <td th:text="${assignment.resourceStoragePath}"></td>
+                <td th:text="${assignment.resourceStoragePath != null and !#strings.isEmpty(assignment.resourceStoragePath) ? #strings.substringBefore(assignment.resourceStoragePath, '/') : 'unknown'}"></td>
+                <td>
+                    <a class="link-btn"
+                       th:if="${assignment.resourceType == 'url' and assignment.resourceUrl != null and !#strings.isEmpty(assignment.resourceUrl)}"
+                       th:href="${assignment.resourceUrl}"
+                       target="_blank"
+                       rel="noopener noreferrer">Open URL</a>
+                    <a class="link-btn"
+                       th:if="${assignment.resourceType == 'file' and assignment.resourceStoragePath != null and !#strings.isEmpty(assignment.resourceStoragePath)}"
+                       th:href="@{/mvc/assignments/tracker-v2/file/{id}(id=${assignment.id})}">Download File</a>
+                    <span th:if="${assignment.resourceType == null or assignment.resourceType == 'none'}">None</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="status" th:text="'Loaded ' + ${#lists.size(assignments)} + ' assignments'"></div>
+
+    <!-- View Toggle -->
+    <div class="view-toggle">
+        <button id="tableViewBtn" class="active" onclick="switchView('table')">Table View</button>
+        <button id="jsonViewBtn" onclick="switchView('json')">JSON View</button>
+    </div>
+
+    <!-- JSON Viewer Panel -->
+    <div id="jsonViewer">
+        <div class="json-toolbar">
+            <select id="dataTypeSelect" onchange="updateJsonDisplay()">
+                <option value="assignments">Assignments Only</option>
+                <option value="full">Assignments + Submissions + Grades</option>
+                <option value="submissions">Submissions Only</option>
+                <option value="grades">Grades Only</option>
+            </select>
+            <button onclick="downloadJson()">Download JSON</button>
+            <button onclick="copyJsonToClipboard()">Copy to Clipboard</button>
+            <button onclick="formatJson()">Format</button>
+        </div>
+        <div id="jsonContainer">
+            <span style="color: #999;">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Hidden table view wrapper -->
+    <div id="tableView"></div>
+
+    <script>
+        // Initial data embedded from server
+        const serverAssignments = [];
+        document.addEventListener('DOMContentLoaded', function() {
+            const table = document.querySelector('table');
+            const rows = table.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 7) {
+                    serverAssignments.push({
+                        id: parseInt(cells[0].textContent.trim()) || null,
+                        name: cells[1].textContent.trim(),
+                        type: cells[2].textContent.trim(),
+                        resourceType: cells[3].textContent.trim() || null,
+                        resourceFilename: cells[4].textContent.trim() || null,
+                        resourceUrl: cells[5].textContent.trim() || null,
+                        resourceStoragePath: cells[6].textContent.trim() || null,
+                        uploadedBy: cells[7].textContent.trim()
+                    });
+                }
+            });
+            
+            // Initial display
+            updateJsonDisplay();
+        });
+
+        function switchView(view) {
+            const tableViewBtn = document.getElementById('tableViewBtn');
+            const jsonViewBtn = document.getElementById('jsonViewBtn');
+            const table = document.querySelector('table');
+            const status = document.querySelector('.status');
+            const jsonViewer = document.getElementById('jsonViewer');
+            const createForm = document.querySelector('.create-form');
+            const actions = document.querySelector('.actions');
+            
+            if (view === 'json') {
+                tableViewBtn.classList.remove('active');
+                jsonViewBtn.classList.add('active');
+                table.style.display = 'none';
+                status.style.display = 'none';
+                createForm.style.display = 'none';
+                actions.style.display = 'none';
+                jsonViewer.classList.add('active');
+            } else {
+                tableViewBtn.classList.add('active');
+                jsonViewBtn.classList.remove('active');
+                table.style.display = '';
+                status.style.display = '';
+                createForm.style.display = '';
+                actions.style.display = '';
+                jsonViewer.classList.remove('active');
+            }
+        }
+
+        async function updateJsonDisplay() {
+            const dataType = document.getElementById('dataTypeSelect').value;
+            const container = document.getElementById('jsonContainer');
+            
+            try {
+                let data = {};
+                
+                if (dataType === 'assignments' || dataType === 'full') {
+                    data.assignments = serverAssignments;
+                }
+                
+                if (dataType === 'submissions' || dataType === 'full') {
+                    try {
+                        const submissionsResp = await fetch('/api/submissions');
+                        if (submissionsResp.ok) {
+                            data.submissions = await submissionsResp.json();
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch submissions:', e);
+                    }
+                }
+                
+                if (dataType === 'grades' || dataType === 'full') {
+                    try {
+                        const gradesResp = await fetch('/api/grades');
+                        if (gradesResp.ok) {
+                            data.grades = await gradesResp.json();
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch grades:', e);
+                    }
+                }
+                
+                const jsonStr = JSON.stringify(data, null, 2);
+                container.innerHTML = syntaxHighlight(jsonStr);
+            } catch (error) {
+                container.innerHTML = `<span style="color: #f48;">Error loading data: ${error.message}</span>`;
+            }
+        }
+
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                var cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function downloadJson() {
+            const dataType = document.getElementById('dataTypeSelect').value;
+            const container = document.getElementById('jsonContainer');
+            const jsonText = container.innerText;
+            
+            const blob = new Blob([jsonText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `assignments-${dataType}-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function copyJsonToClipboard() {
+            const container = document.getElementById('jsonContainer');
+            const jsonText = container.innerText;
+            
+            navigator.clipboard.writeText(jsonText).then(() => {
+                alert('JSON copied to clipboard!');
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+
+        function formatJson() {
+            updateJsonDisplay();
+        }
+    </script>
+</body>
+</html>
