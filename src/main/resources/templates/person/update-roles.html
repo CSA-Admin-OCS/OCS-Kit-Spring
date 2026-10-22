@@ -20,16 +20,16 @@
                 <label for="role-user">User</label><br>
 
                 <input type="radio" id="role-admin" name="roleName" value="ROLE_ADMIN">
-                <label for="role-admin">Admin</label><br>
+                <label for="role-admin" th:text="${@kitFeatures.roleLabel('admin')}">Admin</label><br>
 
                 <input type="radio" id="role-tester" name="roleName" value="ROLE_TESTER">
                 <label for="role-tester">Tester</label><br>
 
                 <input type="radio" id="role-teacher" name="roleName" value="ROLE_TEACHER">
-                <label for="role-teacher">Teacher</label><br>
+                <label for="role-teacher" th:text="${@kitFeatures.roleLabel('staff')}">Teacher</label><br>
 
                 <input type="radio" id="role-student" name="roleName" value="ROLE_STUDENT">
-                <label for="role-student">Student</label><br>
+                <label for="role-student" th:text="${@kitFeatures.roleLabel('member')}">Student</label><br>
 
             </div>
             <button class="btn btn-secondary btn-sm" type="submit">Add Role</button>

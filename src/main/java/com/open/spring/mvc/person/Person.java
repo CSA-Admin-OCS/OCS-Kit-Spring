@@ -36,6 +36,7 @@ import com.open.spring.mvc.synergy.SynergyGrade;
 import com.open.spring.mvc.trains.TrainCompany;
 import com.open.spring.mvc.userStocks.userStocksTable;
 
+import com.open.spring.system.kit.KitSeedAccounts;
 import io.github.cdimascio.dotenv.Dotenv;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -347,39 +348,11 @@ public class Person extends Submitter implements Comparable<Person> {
 
         // JSON-like list of person data using Map.ofEntries
         List<Map<String, Object>> personData = Arrays.asList(
-                // Admin user from .env
-                Map.ofEntries(
-                        Map.entry("name", envOrDefault(dotenv, "ADMIN_NAME", "Admin User")),
-                        Map.entry("uid", envOrDefault(dotenv, "ADMIN_UID", "admin")),
-                        Map.entry("email", envOrDefault(dotenv, "ADMIN_EMAIL", "admin@example.com")),
-                        Map.entry("password", adminPassword),
-                        Map.entry("sid", envOrDefault(dotenv, "ADMIN_SID", "9999990")),
-                        Map.entry("pfp", envOrDefault(dotenv, "ADMIN_PFP", "/images/default.png")),
-                        Map.entry("kasmServerNeeded", false),
-                        Map.entry("roles", Arrays.asList("ROLE_USER", "ROLE_STUDENT", "ROLE_TEACHER", "ROLE_ADMIN")),
-                        Map.entry("stocks", "BTC,ETH")),
-                // Teacher user from .env
-                Map.ofEntries(
-                        Map.entry("name", envOrDefault(dotenv, "TEACHER_NAME", "Teacher User")),
-                        Map.entry("uid", envOrDefault(dotenv, "TEACHER_UID", "teacher")),
-                        Map.entry("email", envOrDefault(dotenv, "TEACHER_EMAIL", "teacher@example.com")),
-                        Map.entry("password", teacherPassword),
-                        Map.entry("sid", envOrDefault(dotenv, "TEACHER_SID", "9999998")),
-                        Map.entry("pfp", envOrDefault(dotenv, "TEACHER_PFP", "/images/default.png")),
-                        Map.entry("kasmServerNeeded", true),
-                        Map.entry("roles", Arrays.asList("ROLE_USER", "ROLE_TEACHER")),
-                        Map.entry("stocks", "BTC,ETH")),
-                // Default user from .env
-                Map.ofEntries(
-                        Map.entry("name", envOrDefault(dotenv, "USER_NAME", "Default User")),
-                        Map.entry("uid", envOrDefault(dotenv, "USER_UID", "user")),
-                        Map.entry("email", envOrDefault(dotenv, "USER_EMAIL", "user@example.com")),
-                        Map.entry("password", envOrDefault(dotenv, "USER_PASSWORD", defaultPassword)),
-                        Map.entry("sid", envOrDefault(dotenv, "USER_SID", "9999999")),
-                        Map.entry("pfp", envOrDefault(dotenv, "USER_PFP", "/images/default.png")),
-                        Map.entry("kasmServerNeeded", true),
-                        Map.entry("roles", Arrays.asList("ROLE_USER", "ROLE_STUDENT")),
-                        Map.entry("stocks", "BTC,ETH")),
+                // Admin, staff and member seed accounts: kit defaults (kits/catalog.json), .env overrides
+                seedAccount(dotenv, "ADMIN", KitSeedAccounts.get("admin"), adminPassword, "9999990", false),
+                seedAccount(dotenv, "TEACHER", KitSeedAccounts.get("staff"), teacherPassword, "9999998", true),
+                seedAccount(dotenv, "USER", KitSeedAccounts.get("member"),
+                        envOrDefault(dotenv, "USER_PASSWORD", defaultPassword), "9999999", true),
                 // Alexander Graham Bell - hardcoded student user
                 Map.ofEntries(
                         Map.entry("name", "Alexander Graham Bell"),
@@ -455,6 +428,21 @@ public class Person extends Submitter implements Comparable<Person> {
         Collections.sort(people);
 
         return people.toArray(new Person[0]);
+    }
+
+    /** A seed account for a canonical role; PREFIX_UID/NAME/EMAIL/SID/PFP in .env override the kit defaults. */
+    private static Map<String, Object> seedAccount(Dotenv dotenv, String prefix, KitSeedAccounts.Account account,
+            String password, String defaultSid, boolean kasmServerNeeded) {
+        return Map.ofEntries(
+                Map.entry("name", envOrDefault(dotenv, prefix + "_NAME", account.defaultName())),
+                Map.entry("uid", envOrDefault(dotenv, prefix + "_UID", account.uid())),
+                Map.entry("email", envOrDefault(dotenv, prefix + "_EMAIL", account.defaultEmail())),
+                Map.entry("password", password),
+                Map.entry("sid", envOrDefault(dotenv, prefix + "_SID", defaultSid)),
+                Map.entry("pfp", envOrDefault(dotenv, prefix + "_PFP", "/images/default.png")),
+                Map.entry("kasmServerNeeded", kasmServerNeeded),
+                Map.entry("roles", account.authorities()),
+                Map.entry("stocks", "BTC,ETH"));
     }
 
     private static String requireEnv(Dotenv dotenv, String key) {

@@ -135,6 +135,23 @@ class KitFeaturesTest {
         assertEquals("Member", kit("business", null).authorityLabel("ROLE_STUDENT"));
     }
 
+    @Test
+    void seedAccountsAndSignupRoleFollowTheKit() {
+        kit("business", null);
+        assertEquals(List.of("admin", "manager", "member"),
+                KitSeedAccounts.active().stream().map(KitSeedAccounts.Account::uid).toList());
+        assertEquals("Manager User", KitSeedAccounts.get("staff").defaultName());
+        assertEquals(List.of("ROLE_USER", "ROLE_TEACHER"), KitSeedAccounts.get("staff").authorities());
+
+        kit("vanilla", null);
+        assertEquals(List.of("admin", "editor", "user"),
+                KitSeedAccounts.active().stream().map(KitSeedAccounts.Account::uid).toList());
+
+        KitFeatures education = kit("education", null);
+        assertEquals("student", KitSeedAccounts.get("member").uid());
+        assertEquals(List.of("ROLE_USER", "ROLE_STUDENT"), education.signupAuthorities());
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> roles(KitFeatures f) {
         return (Map<String, Object>) f.describePublic().get("roles");

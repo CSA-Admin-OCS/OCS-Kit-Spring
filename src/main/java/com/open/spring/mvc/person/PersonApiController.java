@@ -70,6 +70,9 @@ public class PersonApiController {
     @Autowired
     private PersonDetailsService personDetailsService;
 
+    @Autowired(required = false)
+    private com.open.spring.system.kit.KitFeatures kitFeatures;
+
 
     @Autowired
     private TinkleJPARepository tinkleRepository;
@@ -410,6 +413,18 @@ public class PersonApiController {
         person.setPfp(profilePicture);
         person.setKasmServerNeeded(kasmServerNeeded);
         person.getRoles().add(defaultRole);
+        // Plus the kit's signup_role (kits/catalog.json spring.roles); never admin via public sign-up.
+        if (kitFeatures != null) {
+            for (String authority : kitFeatures.signupAuthorities()) {
+                if ("ROLE_ADMIN".equals(authority) || person.getRoles().stream().anyMatch(r -> authority.equals(r.getName()))) {
+                    continue;
+                }
+                PersonRole role = personDetailsService.findRole(authority);
+                if (role != null) {
+                    person.getRoles().add(role);
+                }
+            }
+        }
 
         // Non-critical feature entities should be created lazily in their own flows.
         person.setBanks(null);

@@ -74,6 +74,12 @@ public class KitFeatures {
         this.storeProvider = store;
         this.events = events;
         this.enabled = Set.copyOf(resolution.enabled());
+        KitSeedAccounts.activate(KitSeedAccounts.forKit(catalog, roleKit()));
+    }
+
+    /** Spring authorities a new sign-up gets: the kit's signup_role (catalog spring.roles). */
+    public List<String> signupAuthorities() {
+        return catalog.authoritiesFor(roleKit().signupRole());
     }
 
     // ------------------------------------------------------------------ startup
