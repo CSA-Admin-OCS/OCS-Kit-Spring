@@ -98,6 +98,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/api/**", "/authenticate", "/run/**").permitAll()  // Allow only relevant CORS preflight requests
                         .requestMatchers("/authenticate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/authenticate").permitAll() // allow POST on auth
+                        // Kit info (which features are enabled) - public so frontends can adapt before login
+                        .requestMatchers(HttpMethod.GET, "/api/kit").permitAll()
                         // Admin-only writes are listed FIRST: rules are first-match-wins, and a
                         // method-less permitAll on /api/person/create would otherwise also permit
                         // DELETE and PUT on that path, shadowing the ROLE_ADMIN rules below.
@@ -249,6 +251,7 @@ public class SecurityConfig {
         Map<String, String> policy = new LinkedHashMap<>();
         policy.put("/authenticate", "permitAll");
         policy.put("POST /authenticate", "permitAll");
+        policy.put("GET /api/kit", "permitAll");
         policy.put("/api/person/create", "permitAll");
         policy.put("/api/person/create/", "permitAll");
         policy.put("POST /api/person/create", "permitAll");
