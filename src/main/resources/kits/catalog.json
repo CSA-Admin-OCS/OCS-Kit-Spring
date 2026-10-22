@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "description": "Canonical OCS-in-a-Kit feature catalog. Feature ids are shared by OCS-Kit-Pages, OCS-Kit-Flask and OCS-Kit-Spring; each repo's kits/catalog.json maps these ids to its own code. 'core' is always on. Each feature has a category (core | general | education). Kit presets are explicit feature lists; '*' in a FEATURES override still means every feature. Each feature also has labels (see 'labels') describing what it needs and what data it handles.",
+  "categories": {
+    "core": {
+      "name": "Core",
+      "description": "Always on in every kit."
+    },
+    "general": {
+      "name": "General",
+      "description": "Useful to any organization; included in Business and available to every kit."
+    },
+    "education": {
+      "name": "Educational",
+      "description": "Classroom-specific features (lessons, grading, hall pass). Included in the Education kit only; other kits can still opt in explicitly."
+    }
+  },
+  "labels": {
+    "student-safe": "Fine to give to students without extra setup or supervision.",
+    "classroom": "Built for running a class (teacher/student roles, periods, courses).",
+    "teacher-tools": "Mainly used by teachers or admins.",
+    "needs-api-key": "Needs a third-party API key in the backend .env to work.",
+    "third-party-data": "Sends user content to an outside service (e.g. an AI provider).",
+    "needs-external-service": "Needs a separate server or account you run yourself.",
+    "user-content": "Users post content others can see; plan for moderation.",
+    "personal-data": "Stores personal information about users.",
+    "privacy-sensitive": "Handles sensitive data (e.g. biometrics); check your privacy policy first.",
+    "runs-code": "Executes user code in sandboxed containers.",
+    "simulation": "Simulated money/markets/games, no real transactions.",
+    "demo": "Sample/teaching code, not needed in production."
+  },
+  "spring": {
+    "about": "OCS-Kit-Spring mapping (single source of truth for gating). spring.packages: Java packages relative to com.open.spring that belong to the feature (sub-packages included); every package under mvc/ and every other top-level package must be listed by exactly one feature, core included. spring.paths: URL path prefixes owned by the feature, matched on segment boundaries with the longest prefix winning; requests under a disabled feature's prefix get 404, and its @Scheduled jobs, startup runners and ModelInit seed data are skipped. A feature package may host another feature's endpoint only as a carve-out under its own prefix (e.g. /api/submissions/ai-grade). ids, names, descriptions, categories, labels and kits are copied verbatim from the canonical OCS-Kit/kits/catalog.json. KitCatalogValidationTest checks all of this."
+  },
+  "features": {
+    "core": {
+      "name": "Core platform",
+      "category": "core",
+      "labels": ["student-safe", "personal-data"],
+      "always_on": true,
+      "description": "Login, accounts, roles, sections/groups, profile, admin pages, blog + notebook pipeline, search.",
+      "spring": {
+        "packages": ["mvc.person", "mvc.groups", "mvc.identity", "mvc.userPreferences", "mvc.backups", "mvc.extract", "mvc.generic", "mvc.table", "mvc.S3uploads", "mvc.dbFix", "system", "security"],
+        "paths": ["/authenticate", "/api/logout", "/api/person", "/api/people", "/api/{sid}", "/mvc/person", "/api/groups", "/mvc/groups", "/api/user", "/api/exports", "/api/imports", "/mvc/extract", "/mvc/import", "/api/collections", "/api/content", "/api/events", "/api/files", "/api/kit"]
+      }
+    },
+    "lessons": {
+      "name": "Lessons",
+      "category": "education",
+      "labels": ["classroom", "student-safe"],
+      "description": "Course lessons and notebooks, lesson layouts, lesson progress tracking.",
+      "spring": {
+        "packages": ["mvc.lessonProgress"],
+        "paths": ["/api/lesson-progress"]
+      }
+    },
+    "code-runner": {
+      "name": "Code runners",
+      "category": "general",
+      "labels": ["runs-code", "student-safe"],
+      "description": "Run student Python, JavaScript and Java in sandboxed runner containers; code-runner widgets in lessons.",
+      "spring": {
+        "packages": ["mvc.javarunner", "mvc.Make_debugger"],
+        "paths": ["/run", "/api/make", "/api/gemini/analyze-log"]
+      }
+    },
+    "assignments": {
+      "name": "Assignments and grading",
+      "category": "education",
+      "labels": ["classroom", "teacher-tools", "personal-data"],
+      "description": "Assignments, submissions, grades, quizzes, quests, certificates, evaluations, team teaching, sprint dates, student/teacher toolkit, grade predictors.",
+      "spring": {
+        "packages": ["mvc.assignments", "mvc.grades", "mvc.gradePrediction", "mvc.synergy", "mvc.progressBar", "mvc.quiz", "mvc.quests", "mvc.certificate", "mvc.teamteach", "mvc.sprintDates", "mvc.evaluationAdmin", "mvc.evaluationStudent", "mvc.assess", "mvc.challengeSubmission", "mvc.onboarding_hacks_rubric"],
+        "paths": ["/api/assignments", "/api/submissions", "/api/assignment-submissions", "/api/assignment-submission-view", "/mvc/assignments", "/api/grades", "/api/progress", "/mvc/progress", "/api/assignment_gradingsystem", "/api/grade-prediction", "/api/synergy", "/mvc/synergy", "/api/quiz", "/api/quests", "/mvc/quests", "/api/certificates", "/api/user-certificates", "/mvc/certificates", "/api/topics", "/api/teachergradingteamteach", "/mvc/teamteach", "/api/sprint-dates", "/api/admin-evaluation", "/api/student-evaluation", "/api/peer-assessments", "/api/challenge-submission", "/api/rubrics"]
+      }
+    },
+    "game-engine": {
+      "name": "Game engine",
+      "category": "general",
+      "labels": ["student-safe"],
+      "description": "JavaScript game engine, game projects (gamify, adventure/RPG), multiplayer, leaderboards, AI NPCs.",
+      "spring": {
+        "packages": ["mvc.rpg", "mvc.games", "mvc.PauseMenu", "mvc.multiplayer", "mvc.leaderboard", "mvc.trains", "mvc.plant"],
+        "paths": ["/adventure", "/mvc/adventure", "/game", "/mvc/games", "/api/pausemenu", "/pausemenu", "/api/players", "/api/leaderboard", "/api/train", "/mvc/train", "/api/plant"]
+      }
+    },
+    "ai-chatbot": {
+      "name": "AI chatbot",
+      "category": "general",
+      "labels": ["needs-api-key", "third-party-data"],
+      "description": "AI chatbot / tutor on the website, answered through the backend's Gemini or Groq chat proxy (API keys stay on the server).",
+      "spring": {
+        "packages": ["mvc.geminiChatbotTest", "mvc.geminiUserPreferences", "mvc.generator", "mvc.voice"],
+        "paths": ["/api/chatbot", "/api/upai", "/generate", "/save-question", "/saved-questions", "/api/voice"]
+      }
+    },
+    "ai-grading": {
+      "name": "AI grading",
+      "category": "education",
+      "labels": ["classroom", "teacher-tools", "needs-api-key", "third-party-data"],
+      "description": "AI grading and feedback for free-response (FRQ) answers and assignments.",
+      "spring": {
+        "packages": ["mvc.geminiFRQgrading", "mvc.automaticFRQFeedback", "mvc.chatter"],
+        "paths": ["/api/gemini-frq", "/api/frq-feedback", "/grader", "/api/submissions/ai-grade", "/api/grade-frqs"]
+      }
+    },
+    "social": {
+      "name": "Social",
+      "category": "general",
+      "labels": ["user-content"],
+      "description": "Microblog, posts, comments, notes, announcements, chat and direct messages, personas.",
+      "spring": {
+        "packages": ["mvc.comment", "mvc.note", "mvc.announcement", "mvc.chat", "mvc.directmessages", "mvc.email"],
+        "paths": ["/api/Comment", "/api/announcements", "/api/chat", "/api/dm", "/api/email", "/api/groups/chat", "/ws-chat"]
+      }
+    },
+    "calendar": {
+      "name": "Calendar",
+      "category": "general",
+      "labels": ["teacher-tools"],
+      "description": "Class calendar, events, issue/calendar sync.",
+      "spring": {
+        "packages": ["mvc.slack"],
+        "paths": ["/api/calendar", "/mvc/calendar", "/slack"]
+      }
+    },
+    "analytics": {
+      "name": "Analytics",
+      "category": "general",
+      "labels": ["teacher-tools", "personal-data"],
+      "description": "Usage analytics, GitHub contribution stats, skill snapshots, stats dashboards.",
+      "spring": {
+        "packages": ["mvc.analytics", "mvc.stats"],
+        "paths": ["/api/analytics", "/api/ocs-analytics", "/api/stats"]
+      }
+    },
+    "hallpass": {
+      "name": "Hall pass",
+      "category": "education",
+      "labels": ["classroom", "teacher-tools"],
+      "description": "Bathroom/hall pass queues, student help queue, approval requests.",
+      "spring": {
+        "packages": ["mvc.bathroom", "mvc.student"],
+        "paths": ["/api/bathroom", "/api/hallpass", "/api/approval", "/api/tinkle", "/api/issue", "/api/teachers", "/mvc/bathroom", "/admin/approval-requests", "/admin/tinkle-view", "/admin/bathroomView", "/api/student_queue"]
+      }
+    },
+    "finance-sim": {
+      "name": "Finance simulation",
+      "category": "general",
+      "labels": ["simulation", "student-safe"],
+      "description": "Bank, stocks, crypto and mining simulation, casino-style probability games.",
+      "spring": {
+        "packages": ["mvc.bank", "mvc.crypto", "mvc.cryptoMining", "mvc.userStocks", "mvc.stocksFetch", "mvc.poker", "mvc.blackjack", "mvc.dice", "mvc.mines", "mvc.hardAssets"],
+        "paths": ["/bank", "/mvc/bank", "/api/crypto", "/api/rankings", "/api/mining", "/stocks/table", "/api/stocks", "/api/casino", "/blackjack", "/api/assets"]
+      }
+    },
+    "resume": {
+      "name": "Resume builder",
+      "category": "general",
+      "labels": ["personal-data"],
+      "description": "Student resume pages and API.",
+      "spring": {
+        "packages": ["mvc.resume", "mvc.resumes"],
+        "paths": ["/api/resume", "/mvc/resumes"]
+      }
+    },
+    "kasm": {
+      "name": "Kasm virtual desktops",
+      "category": "general",
+      "labels": ["needs-external-service"],
+      "description": "Kasm Workspaces integration (needs a Kasm server).",
+      "spring": {
+        "packages": [],
+        "paths": []
+      }
+    },
+    "face-recognition": {
+      "name": "Face recognition",
+      "category": "general",
+      "labels": ["privacy-sensitive", "personal-data"],
+      "description": "Face registration/login (biometric data: check your school's privacy policy before enabling).",
+      "spring": {
+        "packages": ["mvc.mortevision"],
+        "paths": ["/api/face", "/api/mortevision", "/api/tasks", "/websocket"]
+      }
+    },
+    "examples": {
+      "name": "Teaching examples",
+      "category": "general",
+      "labels": ["demo", "student-safe"],
+      "description": "Classroom demo code: hacks, jokes, small sample APIs and pages, media-literacy lesson.",
+      "spring": {
+        "packages": ["mvc.jokes", "mvc.greet", "mvc.factorial", "mvc.palindrome", "mvc.Fibonacci", "mvc.birds", "mvc.titanic", "mvc.dataFun", "mvc.media", "mvc.profileThymeleaf", "hacks", "scraper"],
+        "paths": ["/api/jokes", "/greet", "/factorial", "/factorial-calculate", "/palindrome", "/birds", "/titanic", "/gdp", "/api/media", "/profileThymeleaf", "/api/calendar/isLeapYear", "/api/covid", "/api/scraper"]
+      }
+    }
+  },
+  "kits": {
+    "vanilla": {
+      "name": "OCS Vanilla",
+      "description": "Baseline platform, suitable for giving to students: accounts, profile, blog and notebooks.",
+      "features": ["core"]
+    },
+    "education": {
+      "name": "OCS Education",
+      "description": "A full CS classroom: lessons, code runners, assignments and grading, game engine, AI chatbot tutor and AI grading, calendar, analytics, hall pass.",
+      "features": ["core", "lessons", "code-runner", "assignments", "game-engine", "ai-chatbot", "ai-grading", "calendar", "analytics", "hallpass", "social"]
+    },
+    "business": {
+      "name": "OCS Business",
+      "description": "Everything except classroom-specific (educational) features; customize by adding or removing features.",
+      "features": ["core", "code-runner", "game-engine", "ai-chatbot", "social", "calendar", "analytics", "finance-sim", "resume", "kasm", "face-recognition", "examples"]
+    }
+  }
+}
