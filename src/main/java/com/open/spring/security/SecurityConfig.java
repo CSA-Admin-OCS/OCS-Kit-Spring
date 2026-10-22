@@ -98,7 +98,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/api/**", "/authenticate", "/run/**").permitAll()  // Allow only relevant CORS preflight requests
                         .requestMatchers("/authenticate").permitAll()
                         .requestMatchers(HttpMethod.POST, "/authenticate").permitAll() // allow POST on auth
-                        // Kit info (which features are enabled) - public so frontends can adapt before login
+                        // Kit info (which features are enabled) - public so frontends can adapt before login.
+                        // Changing features and reading setup status is admin-only.
+                        .requestMatchers("/api/kit/admin", "/api/kit/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/kit").permitAll()
                         // Admin-only writes are listed FIRST: rules are first-match-wins, and a
                         // method-less permitAll on /api/person/create would otherwise also permit
@@ -252,6 +254,7 @@ public class SecurityConfig {
         policy.put("/authenticate", "permitAll");
         policy.put("POST /authenticate", "permitAll");
         policy.put("GET /api/kit", "permitAll");
+        policy.put("/api/kit/admin/**", "ROLE_ADMIN");
         policy.put("/api/person/create", "permitAll");
         policy.put("/api/person/create/", "permitAll");
         policy.put("POST /api/person/create", "permitAll");

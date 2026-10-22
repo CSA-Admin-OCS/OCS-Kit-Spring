@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
 
+import com.open.spring.system.kit.KitAlwaysRun;
+
 /**
  * Gives the assignment table a real, indexed content_url column and fills it in from the
  * legacy description marker.
@@ -30,6 +32,7 @@ import lombok.RequiredArgsConstructor;
  * Every step is safe to repeat: it runs on each boot and is a no-op once applied.
  */
 @Component
+@KitAlwaysRun // schema migration: runs even when assignments is disabled
 @RequiredArgsConstructor
 public class AssignmentContentUrlMigration {
 

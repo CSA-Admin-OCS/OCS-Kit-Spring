@@ -30,12 +30,17 @@ public final class KitCatalog {
     public static final String CORE = "core";
     public static final String ALL = "*";
 
+    /** {@code setup} is the canonical setup guide (summary, settings, steps, verify), kept as JSON. */
     public record Feature(String id, String name, String description, String category, List<String> labels,
-                          boolean alwaysOn, List<String> packages, List<String> paths) { }
+                          boolean alwaysOn, List<String> packages, List<String> paths, JsonNode setup) { }
 
     public record Category(String id, String name, String description) { }
 
-    public record Kit(String id, String name, String description, List<String> features) { }
+    /** Canonical roles (admin, staff, member) with their label and seed account uid for this kit. */
+    public record Role(String id, String label, String seedUid) { }
+
+    public record Kit(String id, String name, String description, List<String> features,
+                      Map<String, Role> roles, String signupRole) { }
 
     private final Map<String, Category> categories;
     private final Map<String, String> labels;
@@ -43,15 +48,18 @@ public final class KitCatalog {
     private final Map<String, Kit> kits;
     private final Map<String, String> packageOwners; // relative package -> feature id
     private final Map<String, String> pathOwners;    // path prefix -> feature id
+    private final Map<String, List<String>> roleAuthorities; // canonical role -> Spring authorities
 
     private KitCatalog(Map<String, Category> categories, Map<String, String> labels, Map<String, Feature> features, Map<String, Kit> kits,
-                       Map<String, String> packageOwners, Map<String, String> pathOwners) {
+                       Map<String, String> packageOwners, Map<String, String> pathOwners,
+                       Map<String, List<String>> roleAuthorities) {
         this.categories = Collections.unmodifiableMap(categories);
         this.labels = Collections.unmodifiableMap(labels);
         this.features = Collections.unmodifiableMap(features);
         this.kits = Collections.unmodifiableMap(kits);
         this.packageOwners = Collections.unmodifiableMap(packageOwners);
         this.pathOwners = Collections.unmodifiableMap(pathOwners);
+        this.roleAuthorities = Collections.unmodifiableMap(roleAuthorities);
     }
 
     /** Loads the catalog bundled with the application. */
@@ -116,7 +124,8 @@ public final class KitCatalog {
                 }
             }
             features.put(id, new Feature(id, node.path("name").asText(""), node.path("description").asText(""),
-                    category, featureLabels, node.path("always_on").asBoolean(false), packages, paths));
+                    category, featureLabels, node.path("always_on").asBoolean(false), packages, paths,
+                    node.path("setup")));
         });
         if (!features.containsKey(CORE)) {
             errors.add("the catalog must define the '" + CORE + "' feature");
@@ -132,16 +141,28 @@ public final class KitCatalog {
                     errors.add("kit '" + id + "' names unknown feature '" + member + "'");
                 }
             }
-            kits.put(id, new Kit(id, node.path("name").asText(""), node.path("description").asText(""), members));
+            Map<String, Role> roles = new LinkedHashMap<>();
+            node.path("roles").fields().forEachRemaining(role -> roles.put(role.getKey(), new Role(role.getKey(),
+                    role.getValue().path("label").asText(role.getKey()), role.getValue().path("seed_uid").asText(""))));
+            String signupRole = node.path("signup_role").asText("member");
+            if (!roles.isEmpty() && !roles.containsKey(signupRole)) {
+                errors.add("kit '" + id + "': signup_role '" + signupRole + "' is not one of its roles");
+            }
+            kits.put(id, new Kit(id, node.path("name").asText(""), node.path("description").asText(""), members,
+                    Collections.unmodifiableMap(roles), signupRole));
         });
         if (kits.isEmpty()) {
             errors.add("the catalog defines no kits");
         }
 
+        Map<String, List<String>> roleAuthorities = new LinkedHashMap<>();
+        root.path("spring").path("roles").fields().forEachRemaining(entry ->
+                roleAuthorities.put(entry.getKey(), strings(entry.getValue())));
+
         if (!errors.isEmpty()) {
             throw new IllegalStateException("Invalid kit catalog " + RESOURCE + ":\n  - " + String.join("\n  - ", errors));
         }
-        return new KitCatalog(categories, labels, features, kits, packageOwners, pathOwners);
+        return new KitCatalog(categories, labels, features, kits, packageOwners, pathOwners, roleAuthorities);
     }
 
     private static List<String> strings(JsonNode array) {
@@ -173,6 +194,18 @@ public final class KitCatalog {
 
     public Map<String, String> pathOwners() {
         return pathOwners;
+    }
+
+    /**
+     * Spring authorities granted for a canonical role (admin, staff, member), from the catalog's
+     * spring.roles block. Internal role names never change; kits only relabel them.
+     */
+    public List<String> authoritiesFor(String canonicalRole) {
+        return roleAuthorities.getOrDefault(canonicalRole, List.of("ROLE_USER"));
+    }
+
+    public Map<String, List<String>> roleAuthorities() {
+        return roleAuthorities;
     }
 
     /** Expands a kit preset ("*" means every feature) into feature ids, in catalog order. */

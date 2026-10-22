@@ -7,6 +7,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.LongSupplier;
 
 import javax.sql.DataSource;
 
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +66,8 @@ import com.open.spring.mvc.student.StudentQueue;
 import com.open.spring.mvc.student.StudentQueueJPARepository;
 import com.open.spring.mvc.synergy.SynergyGrade;
 import com.open.spring.mvc.synergy.SynergyGradeJpaRepository;
+import com.open.spring.system.kit.FeatureEnabledEvent;
+import com.open.spring.system.kit.KitFeatures;
 
 
 @Component
@@ -102,6 +106,7 @@ public class ModelInit {
     @Autowired QuizScoreRepository quizScoreRepository;
     @Autowired ResumeJpaRepository resumeJpaRepository;
     @Autowired StatsRepository statsRepository; // curators - stats
+    @Autowired KitFeatures kitFeatures; // kit feature gating: which sample data to seed
 
     // ADMIN_EMAIL: owner of the seeded bathroom/student queues
     @Value("${kit.admin-email}")
@@ -166,17 +171,8 @@ public class ModelInit {
                     st.execute(createGames);
                     System.out.println("Ensured 'games' table exists");
 
-                    try {
-                        long gameCount = 0L;
-                        try { gameCount = gameJpaRepository.count(); } catch (Exception ignore) { gameCount = 0L; }
-                        if (gameCount == 0L) {
-                            Game[] defaults = Game.init();
-                            for (Game g : defaults) {
-                                try { gameJpaRepository.save(g); } catch (Exception ignored) {}
-                            }
-                            System.out.println("Seeded default Game rows via Game.init()");
-                        }
-                    } catch (Throwable t) {
+                    if (kitFeatures.isEnabledFor(Game.class)) {
+                        seedGames();
                     }
                 } catch (SQLException e) {
                     System.err.println("Failed to ensure manual tables: " + e.getMessage());
@@ -220,9 +216,11 @@ public class ModelInit {
                     
                     personDetailsService.save(person);
                     
-                    String text = "Test " + person.getEmail();
-                    Note n = new Note(text, person);
-                    noteRepo.save(n);
+                    if (kitFeatures.isEnabledFor(Note.class)) {
+                        String text = "Test " + person.getEmail();
+                        Note n = new Note(text, person);
+                        noteRepo.save(n);
+                    }
                 }
             }
 
@@ -236,172 +234,242 @@ public class ModelInit {
                 }
             }
             
-            List<Announcement> announcements = Announcement.init();
-            for (Announcement announcement : announcements) {
-                Announcement announcementFound = announcementJPA.findByAuthor(announcement.getAuthor());  
-                if (announcementFound == null) {
-                    announcementJPA.save(new Announcement(announcement.getAuthor(), announcement.getTitle(), announcement.getBody(), announcement.getTags())); // JPA save
+            // Sample data for each enabled feature; disabled features are seeded when an admin
+            // enables them (see onFeatureEnabled). Schema is created for every feature regardless.
+            for (Seed seed : seeds()) {
+                if (kitFeatures.isEnabledFor(seed.entity())) {
+                    seed.action().run();
                 }
-            }
-            // Adventure sub-APIs have been merged into a single Adventure table/entity.
-
-
-
-            
-            List<Comment> Comments = Comment.init();
-            for (Comment Comment : Comments) {
-                List<Comment> CommentFound = CommentJPA.findByAssignment(Comment.getAssignment()); 
-                if (CommentFound.isEmpty()) {
-                    CommentJPA.save(new Comment(Comment.getAssignment(), Comment.getAuthor(), Comment.getText())); // JPA save
-                }
-            }
-
-
-            String[] jokesArray = Jokes.init();
-            for (String joke : jokesArray) {
-                List<Jokes> jokeFound = jokesRepo.findByJokeIgnoreCase(joke);  // JPA lookup
-                if (jokeFound.size() == 0) {
-                    jokesRepo.save(new Jokes(null, joke, 0, 0)); // JPA save
-                }
-            }
-
-            // Tinkle[] tinkleArray = Tinkle.init(personArray);
-            // for(Tinkle tinkle: tinkleArray) {
-            //     // List<Tinkle> tinkleFound = 
-            //     Optional<Tinkle> tinkleFound = tinkleJPA.findByPersonName(tinkle.getPersonName());
-            //     if(tinkleFound.isEmpty()) {
-            //         tinkleJPA.save(tinkle);
-            //     }
-            // }
-
-            BathroomQueue[] queueArray = BathroomQueue.init(adminEmail);
-            for(BathroomQueue queue: queueArray) {
-                Optional<BathroomQueue> queueFound = queueJPA.findByTeacherEmail(queue.getTeacherEmail());
-                if(queueFound.isEmpty()) {
-                    queueJPA.save(queue);
-                }
-            }
-
-            StudentQueue[] studentQueueArray = StudentQueue.init(adminEmail);
-            for(StudentQueue queue: studentQueueArray) {
-                Optional<StudentQueue> queueFound = studentQueueJPA.findByTeacherEmail(queue.getTeacherEmail());
-                if(queueFound.isEmpty()) {
-                    studentQueueJPA.save(queue);
-                }
-            }
-
-            // Teacher API is populated with starting announcements
-            List<Teacher> teachers = Teacher.init();
-            for (Teacher teacher : teachers) {
-            List<Teacher> existTeachers = teacherJPARepository.findByFirstnameIgnoreCaseAndLastnameIgnoreCase(teacher.getFirstname(), teacher.getLastname());
-                if(existTeachers.isEmpty())
-               teacherJPARepository.save(teacher); // JPA save
-            }
-            
-            // Issue database initialization
-            Issue[] issueArray = Issue.init();
-            for (Issue issue : issueArray) {
-                List<Issue> issueFound = issueJPARepository.findByIssueAndBathroomIgnoreCase(issue.getIssue(), issue.getBathroom());
-                if (issueFound.isEmpty()) {
-                    issueJPARepository.save(issue);
-                }
-            }
-            
-            // Assignment database is populated with sample assignments
-            Assignment[] assignmentArray = Assignment.init();
-            for (Assignment assignment : assignmentArray) {
-                Assignment assignmentFound = assignmentJpaRepository.findByName(assignment.getName());
-                if (assignmentFound == null) { // if the assignment doesn't exist
-                    Assignment newAssignment = new Assignment(assignment.getName(), assignment.getType(), assignment.getDescription(), assignment.getPoints(), assignment.getDueDate(), assignment.getAssignmentType());
-                    assignmentJpaRepository.save(newAssignment);
-                }
-            }
-
-            // Now call the non-static init() method
-            String[][] gradeArray = SynergyGrade.init();
-            for (String[] gradeInfo : gradeArray) {
-                Double gradeValue = Double.parseDouble(gradeInfo[0]);
-                Assignment assignment = assignmentJpaRepository.findByName(gradeInfo[1]);
-                Person student = personJpaRepository.findByUid(gradeInfo[2]);
-
-                if (assignment == null || student == null) {
-                    System.out.println("Skipping SynergyGrade seed: missing assignment or student for " + gradeInfo[1] + " / " + gradeInfo[2]);
-                    continue;
-                }
-
-                SynergyGrade gradeFound = gradeJpaRepository.findByAssignmentAndStudent(assignment, student);
-                if (gradeFound == null) { // If the grade doesn't exist
-                    SynergyGrade newGrade = new SynergyGrade(gradeValue, assignment, student);
-                    gradeJpaRepository.save(newGrade);
-                }
-            }
-
-
-            //Media Bias Table
-
-            List<Score> scores = new ArrayList<>();
-            scores.add(new Score("Thomas Edison", 0));
-            for (Score score : scores) {
-                List<Score> existingPlayers = mediaJpaRepository.findByPersonName(score.getPersonName());
-
-                if (existingPlayers.isEmpty()) {
-                    mediaJpaRepository.save(score);
-                }
-            }
-
-            // Quiz Score initialization (guarded in case the table doesn't exist yet)
-            try {
-                QuizScore[] quizScoreArray = QuizScore.init();
-                for (QuizScore quizScore : quizScoreArray) {
-                    List<QuizScore> existingScores = quizScoreRepository
-                        .findByUsernameIgnoreCaseOrderByScoreDesc(quizScore.getUsername());
-
-                    boolean scoreExists = existingScores.stream()
-                        .anyMatch(s -> s.getScore() == quizScore.getScore());
-
-                    if (!scoreExists) {
-                        quizScoreRepository.save(quizScore);
-                    }
-                }
-            } catch (Exception ignored) {
-                // If the quiz_scores table is missing or unavailable at startup, skip seeding
-            }
-
-            // Resume initialization via static init on Resume class (guard missing table)
-            try {
-                Resume[] resumes = Resume.init();
-                for (Resume resume : resumes) {
-                    Optional<Resume> existing = resumeJpaRepository.findByUsername(resume.getUsername());
-                    if (existing.isEmpty()) {
-                        resumeJpaRepository.save(resume);
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-
-            try { // initialize Stats data
-                Stats[] statsArray = {
-                    new Stats(null, "tobytest", "frontend", 1, Boolean.TRUE, 185.0, .92),
-                    new Stats(null, "tobytest", "backend", 1, Boolean.FALSE, 0.0, null),
-                    new Stats(null, "tobytest", "ai", 2, Boolean.TRUE, 240.5, .95),
-                    new Stats(null, "hoptest", "data", 1, Boolean.TRUE, 142.3, .88),
-                    new Stats(null, "hoptest", "resume", 3, Boolean.FALSE, 15.2, null),
-                    new Stats(null, "curietest", "frontend", 2, Boolean.TRUE, 98.6, 0.90),
-                    new Stats(null, "curietest", "backend", 2, Boolean.FALSE, 35.4, null),
-                };
-
-                for (Stats stats : statsArray) {
-                    Optional<Stats> statsFound = statsRepository.findByUsernameAndModuleAndSubmodule(
-                            stats.getUsername(), stats.getModule(), stats.getSubmodule());
-                    if (statsFound.isEmpty()) {
-                        statsRepository.save(stats);
-                    }
-                }
-            } catch (Exception e) {
-                // Handle exception, e.g., log it, but don't stop startup
-                System.err.println("Error initializing Stats data: " + e.getMessage());
             }
         };
+    }
+
+    /** One feature's sample data; the feature comes from the entity's package (kits/catalog.json). */
+    private record Seed(Class<?> entity, LongSupplier count, Runnable action) { }
+
+    private List<Seed> seeds() {
+        return List.of(
+            new Seed(Announcement.class, announcementJPA::count, this::seedAnnouncements),
+            new Seed(Comment.class, CommentJPA::count, this::seedComments),
+            new Seed(Jokes.class, jokesRepo::count, this::seedJokes),
+            new Seed(BathroomQueue.class, queueJPA::count, this::seedBathroomQueues),
+            new Seed(StudentQueue.class, studentQueueJPA::count, this::seedStudentQueues),
+            new Seed(Teacher.class, teacherJPARepository::count, this::seedTeachers),
+            new Seed(Issue.class, issueJPARepository::count, this::seedIssues),
+            new Seed(Assignment.class, assignmentJpaRepository::count, this::seedAssignments),
+            new Seed(SynergyGrade.class, gradeJpaRepository::count, this::seedSynergyGrades),
+            new Seed(Score.class, mediaJpaRepository::count, this::seedMediaScores),
+            new Seed(QuizScore.class, quizScoreRepository::count, this::seedQuizScores),
+            new Seed(Resume.class, resumeJpaRepository::count, this::seedResumes),
+            new Seed(Stats.class, statsRepository::count, this::seedStats),
+            new Seed(Game.class, gameJpaRepository::count, this::seedGames));
+    }
+
+    /** An admin enabled a feature at runtime: seed its tables that are still empty. */
+    @EventListener
+    public void onFeatureEnabled(FeatureEnabledEvent event) {
+        for (Seed seed : seeds()) {
+            if (!event.featureId().equals(kitFeatures.featureFor(seed.entity()))) {
+                continue;
+            }
+            try {
+                if (seed.count().getAsLong() == 0) {
+                    seed.action().run();
+                    System.out.println("Seeded " + seed.entity().getSimpleName() + " for newly enabled feature " + event.featureId());
+                }
+            } catch (RuntimeException e) {
+                System.err.println("Could not seed " + seed.entity().getSimpleName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    private void seedAnnouncements() {
+        List<Announcement> announcements = Announcement.init();
+        for (Announcement announcement : announcements) {
+            Announcement announcementFound = announcementJPA.findByAuthor(announcement.getAuthor());
+            if (announcementFound == null) {
+                announcementJPA.save(new Announcement(announcement.getAuthor(), announcement.getTitle(), announcement.getBody(), announcement.getTags())); // JPA save
+            }
+        }
+    }
+
+    private void seedComments() {
+        List<Comment> Comments = Comment.init();
+        for (Comment Comment : Comments) {
+            List<Comment> CommentFound = CommentJPA.findByAssignment(Comment.getAssignment());
+            if (CommentFound.isEmpty()) {
+                CommentJPA.save(new Comment(Comment.getAssignment(), Comment.getAuthor(), Comment.getText())); // JPA save
+            }
+        }
+    }
+
+    private void seedJokes() {
+        String[] jokesArray = Jokes.init();
+        for (String joke : jokesArray) {
+            List<Jokes> jokeFound = jokesRepo.findByJokeIgnoreCase(joke);  // JPA lookup
+            if (jokeFound.size() == 0) {
+                jokesRepo.save(new Jokes(null, joke, 0, 0)); // JPA save
+            }
+        }
+    }
+
+    private void seedBathroomQueues() {
+        BathroomQueue[] queueArray = BathroomQueue.init(adminEmail);
+        for (BathroomQueue queue : queueArray) {
+            Optional<BathroomQueue> queueFound = queueJPA.findByTeacherEmail(queue.getTeacherEmail());
+            if (queueFound.isEmpty()) {
+                queueJPA.save(queue);
+            }
+        }
+    }
+
+    private void seedStudentQueues() {
+        StudentQueue[] studentQueueArray = StudentQueue.init(adminEmail);
+        for (StudentQueue queue : studentQueueArray) {
+            Optional<StudentQueue> queueFound = studentQueueJPA.findByTeacherEmail(queue.getTeacherEmail());
+            if (queueFound.isEmpty()) {
+                studentQueueJPA.save(queue);
+            }
+        }
+    }
+
+    // Teacher API is populated with starting announcements
+    private void seedTeachers() {
+        List<Teacher> teachers = Teacher.init();
+        for (Teacher teacher : teachers) {
+            List<Teacher> existTeachers = teacherJPARepository.findByFirstnameIgnoreCaseAndLastnameIgnoreCase(teacher.getFirstname(), teacher.getLastname());
+            if (existTeachers.isEmpty()) {
+                teacherJPARepository.save(teacher); // JPA save
+            }
+        }
+    }
+
+    private void seedIssues() {
+        Issue[] issueArray = Issue.init();
+        for (Issue issue : issueArray) {
+            List<Issue> issueFound = issueJPARepository.findByIssueAndBathroomIgnoreCase(issue.getIssue(), issue.getBathroom());
+            if (issueFound.isEmpty()) {
+                issueJPARepository.save(issue);
+            }
+        }
+    }
+
+    // Assignment database is populated with sample assignments
+    private void seedAssignments() {
+        Assignment[] assignmentArray = Assignment.init();
+        for (Assignment assignment : assignmentArray) {
+            Assignment assignmentFound = assignmentJpaRepository.findByName(assignment.getName());
+            if (assignmentFound == null) { // if the assignment doesn't exist
+                Assignment newAssignment = new Assignment(assignment.getName(), assignment.getType(), assignment.getDescription(), assignment.getPoints(), assignment.getDueDate(), assignment.getAssignmentType());
+                assignmentJpaRepository.save(newAssignment);
+            }
+        }
+    }
+
+    private void seedSynergyGrades() {
+        String[][] gradeArray = SynergyGrade.init();
+        for (String[] gradeInfo : gradeArray) {
+            Double gradeValue = Double.parseDouble(gradeInfo[0]);
+            Assignment assignment = assignmentJpaRepository.findByName(gradeInfo[1]);
+            Person student = personJpaRepository.findByUid(gradeInfo[2]);
+
+            if (assignment == null || student == null) {
+                System.out.println("Skipping SynergyGrade seed: missing assignment or student for " + gradeInfo[1] + " / " + gradeInfo[2]);
+                continue;
+            }
+
+            SynergyGrade gradeFound = gradeJpaRepository.findByAssignmentAndStudent(assignment, student);
+            if (gradeFound == null) { // If the grade doesn't exist
+                SynergyGrade newGrade = new SynergyGrade(gradeValue, assignment, student);
+                gradeJpaRepository.save(newGrade);
+            }
+        }
+    }
+
+    // Media Bias Table
+    private void seedMediaScores() {
+        List<Score> scores = new ArrayList<>();
+        scores.add(new Score("Thomas Edison", 0));
+        for (Score score : scores) {
+            List<Score> existingPlayers = mediaJpaRepository.findByPersonName(score.getPersonName());
+            if (existingPlayers.isEmpty()) {
+                mediaJpaRepository.save(score);
+            }
+        }
+    }
+
+    // Quiz Score initialization (guarded in case the table doesn't exist yet)
+    private void seedQuizScores() {
+        try {
+            QuizScore[] quizScoreArray = QuizScore.init();
+            for (QuizScore quizScore : quizScoreArray) {
+                List<QuizScore> existingScores = quizScoreRepository
+                    .findByUsernameIgnoreCaseOrderByScoreDesc(quizScore.getUsername());
+
+                boolean scoreExists = existingScores.stream()
+                    .anyMatch(s -> s.getScore() == quizScore.getScore());
+
+                if (!scoreExists) {
+                    quizScoreRepository.save(quizScore);
+                }
+            }
+        } catch (Exception ignored) {
+            // If the quiz_scores table is missing or unavailable at startup, skip seeding
+        }
+    }
+
+    // Resume initialization via static init on Resume class (guard missing table)
+    private void seedResumes() {
+        try {
+            Resume[] resumes = Resume.init();
+            for (Resume resume : resumes) {
+                Optional<Resume> existing = resumeJpaRepository.findByUsername(resume.getUsername());
+                if (existing.isEmpty()) {
+                    resumeJpaRepository.save(resume);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void seedStats() {
+        try { // initialize Stats data
+            Stats[] statsArray = {
+                new Stats(null, "tobytest", "frontend", 1, Boolean.TRUE, 185.0, .92),
+                new Stats(null, "tobytest", "backend", 1, Boolean.FALSE, 0.0, null),
+                new Stats(null, "tobytest", "ai", 2, Boolean.TRUE, 240.5, .95),
+                new Stats(null, "hoptest", "data", 1, Boolean.TRUE, 142.3, .88),
+                new Stats(null, "hoptest", "resume", 3, Boolean.FALSE, 15.2, null),
+                new Stats(null, "curietest", "frontend", 2, Boolean.TRUE, 98.6, 0.90),
+                new Stats(null, "curietest", "backend", 2, Boolean.FALSE, 35.4, null),
+            };
+
+            for (Stats stats : statsArray) {
+                Optional<Stats> statsFound = statsRepository.findByUsernameAndModuleAndSubmodule(
+                        stats.getUsername(), stats.getModule(), stats.getSubmodule());
+                if (statsFound.isEmpty()) {
+                    statsRepository.save(stats);
+                }
+            }
+        } catch (Exception e) {
+            // Handle exception, e.g., log it, but don't stop startup
+            System.err.println("Error initializing Stats data: " + e.getMessage());
+        }
+    }
+
+    private void seedGames() {
+        try {
+            long gameCount = 0L;
+            try { gameCount = gameJpaRepository.count(); } catch (Exception ignore) { gameCount = 0L; }
+            if (gameCount == 0L) {
+                Game[] defaults = Game.init();
+                for (Game g : defaults) {
+                    try { gameJpaRepository.save(g); } catch (Exception ignored) {}
+                }
+                System.out.println("Seeded default Game rows via Game.init()");
+            }
+        } catch (Throwable t) {
+        }
     }
 
     private boolean isSqliteDatabase() {

@@ -85,7 +85,14 @@ public class AssignmentAiGradingService {
         return url != null && GIST_URL.matcher(url.trim()).matches();
     }
 
+    /** Kit gating: AI grading is its own feature (ai-grading); unset in unit tests means enabled. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.open.spring.system.kit.KitFeatures kitFeatures;
+
     public GradeResult grade(AssignmentSubmission submission) throws Exception {
+        if (kitFeatures != null && !kitFeatures.isEnabled("ai-grading")) {
+            return GradeResult.notGradeable("AI grading is not enabled in this kit (feature ai-grading).");
+        }
         Map<String, Object> content = submission.getContent();
         String contentType = content == null ? null : String.valueOf(content.getOrDefault("type", "")).trim();
 

@@ -10,8 +10,11 @@ import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
 
+import com.open.spring.system.kit.KitAlwaysRun;
+
 /** Creates the assignment-to-course join table for databases managed with ddl-auto=none. */
 @Component
+@KitAlwaysRun // schema migration: runs even when assignments is disabled
 @RequiredArgsConstructor
 public class AssignmentCourseGroupsMigration {
 

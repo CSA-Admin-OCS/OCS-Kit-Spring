@@ -48,7 +48,13 @@
     "demo": "Sample/teaching code, not needed in production."
   },
   "spring": {
-    "about": "OCS-Kit-Spring mapping (single source of truth for gating). spring.packages: Java packages relative to com.open.spring that belong to the feature (sub-packages included); every package under mvc/ and every other top-level package must be listed by exactly one feature, core included. spring.paths: URL path prefixes owned by the feature, matched on segment boundaries with the longest prefix winning; requests under a disabled feature's prefix get 404, and its @Scheduled jobs, startup runners and ModelInit seed data are skipped. A feature package may host another feature's endpoint only as a carve-out under its own prefix (e.g. /api/submissions/ai-grade). ids, names, descriptions, categories, labels and kits are copied verbatim from the canonical OCS-Kit/kits/catalog.json. KitCatalogValidationTest checks all of this."
+    "about": "OCS-Kit-Spring mapping (single source of truth for gating). spring.packages: Java packages relative to com.open.spring that belong to the feature (sub-packages included); every package under mvc/ and every other top-level package must be listed by exactly one feature, core included. spring.paths: URL path prefixes owned by the feature, matched on segment boundaries with the longest prefix winning; requests under a disabled feature's prefix get 404, and its @Scheduled jobs, startup runners and ModelInit seed data are skipped. A feature package may host another feature's endpoint only as a carve-out under its own prefix (e.g. /api/submissions/ai-grade). ids, names, descriptions, categories, labels and kits are copied verbatim from the canonical OCS-Kit/kits/catalog.json. KitCatalogValidationTest checks all of this.",
+    "roles_about": "Canonical role -> Spring authorities granted to seed accounts and sign-ups with that role. Internal names (ROLE_TEACHER, ROLE_STUDENT) stay the same in every kit; kits only change the labels users see (kits.<kit>.roles.<role>.label).",
+    "roles": {
+      "admin": ["ROLE_USER", "ROLE_STUDENT", "ROLE_TEACHER", "ROLE_ADMIN"],
+      "staff": ["ROLE_USER", "ROLE_TEACHER"],
+      "member": ["ROLE_USER", "ROLE_STUDENT"]
+    }
   },
   "features": {
     "core": {
