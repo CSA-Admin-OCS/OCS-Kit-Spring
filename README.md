@@ -35,12 +35,13 @@ You need Docker with the compose plugin.
    ```
 
    On the first start the app finds no database in `./volumes`, creates the schema and seeds
-   the admin, teacher and sample accounts. Later starts reuse the same database.
+   the admin, staff and member accounts plus sample data for the enabled features. Later
+   starts reuse the same database.
 
 3. Check it:
 
    ```bash
-   curl http://localhost:8585/api/jokes/
+   curl http://localhost:8585/api/kit
    curl -i -X POST http://localhost:8585/authenticate \
         -H 'Content-Type: application/json' \
         -d '{"uid":"admin","password":"<ADMIN_PASSWORD>"}'
@@ -68,6 +69,101 @@ SITE_DOMAIN=api.example.org envsubst '${SITE_DOMAIN}' \
 
 Then enable it and run `certbot --nginx -d api.example.org`. Port 8585 is the API; 8589 is the
 group-chat websocket.
+
+## Choosing a kit
+
+Set `KIT` in `.env` to pick a preset. Every feature's code ships in the image; a disabled
+feature answers 404 on its URLs, its scheduled jobs and startup seeders do not run, and its
+admin nav links are hidden. Its tables are still created, so turning it on later just works.
+
+| Kit | For | Roles (admin / staff / member) |
+|---|---|---|
+| `vanilla` | A baseline site you can hand to students: accounts, profile, blog and notebooks. | Admin / Editor / User |
+| `education` | A full CS classroom. | Admin / Teacher / Student |
+| `business` | Organizations without students; everything except classroom features. | Admin / Manager / Member |
+| unset | Every feature on (how the platform behaved before kits). Education role names. | Admin / Teacher / Student |
+
+| Feature | Category | Vanilla | Education | Business | Spring packages (under `com.open.spring`) |
+|---|---|:-:|:-:|:-:|---|
+| `core` (always on) | core | yes | yes | yes | mvc: person, groups, identity, userPreferences, backups, extract, generic, table, S3uploads, dbFix; system, security |
+| `lessons` | education |  | yes |  | lessonProgress |
+| `code-runner` | general |  | yes |  | javarunner, Make_debugger |
+| `assignments` | education |  | yes |  | assignments, grades, gradePrediction, synergy, progressBar, quiz, quests, certificate, teamteach, sprintDates, evaluationAdmin, evaluationStudent, assess, challengeSubmission, onboarding_hacks_rubric |
+| `game-engine` | general |  | yes |  | rpg, games, PauseMenu, multiplayer, leaderboard, trains, plant |
+| `ai-chatbot` | general |  | yes | yes | geminiChatbotTest, geminiUserPreferences, generator, voice |
+| `ai-grading` | education |  | yes |  | geminiFRQgrading, automaticFRQFeedback, chatter (+ `/api/submissions/ai-grade`, `/api/grade-frqs`) |
+| `social` | general |  | yes | yes | comment, note, announcement, chat, directmessages, email (+ group chat) |
+| `calendar` | general |  | yes | yes | slack |
+| `analytics` | general |  | yes | yes | analytics, stats |
+| `hallpass` | education |  | yes |  | bathroom, student |
+| `finance-sim` | general |  |  |  | bank, crypto, cryptoMining, userStocks, stocksFetch, poker, blackjack, dice, mines, hardAssets |
+| `resume` | general |  | yes | yes | resume, resumes |
+| `kasm` | general |  |  |  | none (frontend/Flask only) |
+| `face-recognition` | general |  |  |  | mortevision (+ `/api/face`) |
+| `examples` | general |  |  |  | jokes, greet, factorial, palindrome, Fibonacci, birds, titanic, dataFun, media, profileThymeleaf, hacks, scraper |
+
+The exact URL prefixes per feature are in `src/main/resources/kits/catalog.json`. At startup
+the log lists the kit and every feature as `[on ]`/`[off]` with its category, labels and
+where the setting came from. `GET /api/kit` (public) returns the same for frontends:
+
+```json
+{"kit": "education", "kit_name": "OCS Education", "features": ["core", "lessons", ...],
+ "feature_details": [{"id": "core", "name": "Core platform", "category": "core", "labels": [...], "enabled": true}, ...],
+ "roles": {"admin": {"label": "Admin"}, "staff": {"label": "Teacher"}, "member": {"label": "Student"}},
+ "signup_role": "member"}
+```
+
+### Roles
+
+Each kit names the three canonical roles differently and seeds one account per role
+(`ADMIN_*`, `TEACHER_*` and `USER_*` in `.env` set the admin, staff and member accounts and
+override the kit's default uid/name/email). Internally the roles stay `ROLE_ADMIN`,
+`ROLE_TEACHER` (staff) and `ROLE_STUDENT` (member), all with `ROLE_USER`; only the labels
+in the admin UI and `/api/kit` change. New sign-ups get the kit's `signup_role`.
+
+## Customizing features
+
+Three layers, later ones win:
+
+1. `KIT` picks the preset.
+2. `FEATURES` in `.env` adjusts it at startup:
+   - `FEATURES=+finance-sim,-hallpass` adds/removes relative to the kit;
+   - `FEATURES=lessons,code-runner` is an explicit list (core is always added);
+   - `FEATURES=*` turns everything on, `FEATURES=*,-face-recognition` everything but one.
+
+   Unknown ids, unknown kits and `-core` stop startup with a message listing valid values.
+3. Admins override features at runtime, no restart needed (stored in the `feature_override`
+   table). Only `ROLE_ADMIN` may do this; teachers/staff and members get 403.
+
+   ```bash
+   TOKEN=...   # the jwt_java_spring cookie from POST /authenticate as an admin
+   curl -b "jwt_java_spring=$TOKEN" http://localhost:8585/api/kit/admin          # sources, setup guides, readiness
+   curl -b "jwt_java_spring=$TOKEN" -X PUT http://localhost:8585/api/kit/admin/features \
+        -H 'Content-Type: application/json' -d '{"features": {"finance-sim": true, "hallpass": false}}'
+   curl -b "jwt_java_spring=$TOKEN" -X DELETE http://localhost:8585/api/kit/admin/features/hallpass  # back to KIT/FEATURES
+   ```
+
+   `/api/kit/admin` adds, per feature, `source` (`kit`, `env` or `admin`), the setup guide
+   (summary, the Spring settings with `configured: true/false` - never their values - steps,
+   how to verify) and `ready` (all required settings present). Changes are logged with the
+   admin's uid and time. Enabling a feature at runtime seeds its sample data if its tables
+   are empty and runs any startup task it skipped.
+
+## Adding a new feature
+
+1. Add the feature id (name, category, labels, setup) and its kit membership to the
+   canonical `OCS-Kit/kits/catalog.json`, then run `python3 scripts/sync_kit_catalog.py` here.
+2. In `src/main/resources/kits/catalog.json`, fill the feature's `spring` block: its
+   `packages` (e.g. `mvc.myfeature`) and the URL `paths` its controllers use
+   (e.g. `/api/myfeature`, `/mvc/myfeature`).
+3. Put the code in that package. Gating needs no extra code: requests, `@Scheduled` jobs,
+   event listeners and `CommandLineRunner` seeders are matched to the feature by package and
+   path. Seed sample data in `ModelInit.seeds()` with the entity class, or with a runner in
+   the package. Mark schema migrations that must always run with `@KitAlwaysRun`. Gate nav
+   links with `th:if="${@kitFeatures.pathEnabled('/mvc/myfeature')}"`.
+4. Run `./mvnw test`. `KitCatalogValidationTest` fails if a package or endpoint is not mapped,
+   if two features claim the same package or prefix, or if the catalog drifted from the
+   canonical one.
 
 ## Database
 
