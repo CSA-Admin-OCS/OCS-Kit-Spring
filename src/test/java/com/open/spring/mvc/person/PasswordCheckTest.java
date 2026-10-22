@@ -53,4 +53,20 @@ public class PasswordCheckTest {
 
         assertFalse(person.checkPassword());
     }
+
+    // The same rule, as JPA applies it on save through the transient newPassword field.
+    @Test
+    public void testJpaValidatorRejectsWeakNewPassword() {
+        try (jakarta.validation.ValidatorFactory factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            jakarta.validation.Validator validator = factory.getValidator();
+            Person person = new Person();
+            person.setNewPassword("weakpass");
+            assertTrue(validator.validateProperty(person, "newPassword").stream()
+                    .anyMatch(v -> v.getMessage().equals(Person.PASSWORD_RULE)));
+            person.setNewPassword("Password1!");
+            assertTrue(validator.validateProperty(person, "newPassword").isEmpty());
+            person.setNewPassword(null); // unchanged password: nothing to check
+            assertTrue(validator.validateProperty(person, "newPassword").isEmpty());
+        }
+    }
 }

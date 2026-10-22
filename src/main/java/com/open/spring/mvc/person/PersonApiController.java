@@ -188,7 +188,7 @@ public class PersonApiController {
                 changedFields.append("email,");
             }
             if (passwordChanged) {
-                existingPerson.setPassword(passwordEncoder.encode(personDto.getPassword()));
+                existingPerson.setPassword(personDto.getPassword());
                 changedFields.append("password,");
             }
             if (isAdmin && uidChangeRequested) {
@@ -219,8 +219,9 @@ public class PersonApiController {
                 existingPerson.setKasmServerNeeded(personDto.getKasmServerNeeded());
                 changedFields.append("kasmServerNeeded,");
             }
-            // Save the updated person back to the repository
-            Person updatedPerson = repository.save(existingPerson);
+            // Save the updated person; JPA rejects a weak new password with a 400
+            personDetailsService.save(existingPerson, !passwordChanged);
+            Person updatedPerson = existingPerson;
 
             String changed = changedFields.length() == 0
                     ? "none"
@@ -438,6 +439,8 @@ public class PersonApiController {
             JSONObject responseObject = new JSONObject();
             responseObject.put("error", "Unable to create user due to duplicate constrained fields (likely uid/email/sid)");
             return new ResponseEntity<>(responseObject.toString(), responseHeaders, HttpStatus.CONFLICT);
+        } catch (jakarta.validation.ConstraintViolationException e) {
+            throw e; // JPA rejected a field (e.g. weak password); ExceptionHandlerAdvice sends the 400
         } catch (Exception e) {
             logger.error("Person create failed for uid={} email={}", uid, email, e);
             HttpHeaders responseHeaders = new HttpHeaders();
@@ -763,7 +766,7 @@ public class PersonApiController {
                 changedFields.append("email,");
             }
             if (passwordChanged) {
-                existingPerson.setPassword(passwordEncoder.encode(personDto.getPassword()));
+                existingPerson.setPassword(personDto.getPassword());
                 changedFields.append("password,");
             }
             if (nameChanged) {
@@ -788,8 +791,8 @@ public class PersonApiController {
                 existingPerson.setSid(personDto.getSid());
                 changedFields.append("sid,");
             }
-            // Save the updated person back to the repository
-            repository.save(existingPerson);
+            // Save the updated person; JPA rejects a weak new password with a 400
+            personDetailsService.save(existingPerson, !passwordChanged);
 
             String changed = changedFields.length() == 0
                     ? "none"
