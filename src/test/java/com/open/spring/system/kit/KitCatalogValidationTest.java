@@ -147,6 +147,16 @@ class KitCatalogValidationTest {
     }
 
     @Test
+    void springRoleMappingCoversEveryCanonicalRole() {
+        java.util.Set<String> canonicalRoles = new java.util.TreeSet<>();
+        catalog.kits().values().forEach(kit -> canonicalRoles.addAll(kit.roles().keySet()));
+        assertEquals(canonicalRoles, new java.util.TreeSet<>(catalog.roleAuthorities().keySet()),
+                "spring.roles must map exactly the canonical roles used by the kits");
+        catalog.roleAuthorities().forEach((role, authorities) -> assertTrue(authorities.contains("ROLE_USER"),
+                "spring.roles." + role + " should include ROLE_USER"));
+    }
+
+    @Test
     void strictParsingRejectsDuplicateClaimsAndUnknownIds() {
         String bad = "{\"features\":{\"core\":{\"always_on\":true,\"spring\":{\"packages\":[\"a\"],\"paths\":[\"/x\"]}},"
                 + "\"f\":{\"spring\":{\"packages\":[\"a\"],\"paths\":[\"/x\"]}}},"
