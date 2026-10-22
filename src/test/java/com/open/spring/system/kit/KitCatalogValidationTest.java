@@ -134,12 +134,16 @@ class KitCatalogValidationTest {
             Map.Entry<String, JsonNode> feature = it.next();
             JsonNode mine = actual.path("features").path(feature.getKey());
             feature.getValue().fields().forEachRemaining(field -> assertEquals(field.getValue(), mine.get(field.getKey()),
-                    "feature '" + feature.getKey() + "' field '" + field.getKey() + "' differs from " + canonical));
+                    "feature '" + feature.getKey() + "' field '" + field.getKey() + "' differs from " + canonical
+                    + " (re-sync with scripts/sync_kit_catalog.py)"));
         }
-        assertEquals(expected.path("kits"), actual.path("kits"), "kits differ from " + canonical);
-        assertEquals(expected.path("categories"), actual.path("categories"), "categories differ from " + canonical);
-        assertEquals(expected.path("labels"), actual.path("labels"), "labels differ from " + canonical);
-        assertEquals(expected.path("description"), actual.path("description"), "description differs from " + canonical);
+        // Everything else (kits, categories, labels, roles, ...) is copied verbatim.
+        expected.fields().forEachRemaining(field -> {
+            if (!field.getKey().equals("features")) {
+                assertEquals(field.getValue(), actual.get(field.getKey()), "top-level '" + field.getKey()
+                        + "' differs from " + canonical + " (re-sync with scripts/sync_kit_catalog.py)");
+            }
+        });
     }
 
     @Test
