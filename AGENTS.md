@@ -8,7 +8,7 @@ school-neutral copy of an upstream classroom project and ships as a Docker image
 - No school-specific values in code: names, domains, emails, URLs and secrets come from
   configuration. Add a `${ENV_VAR:default}` line to `application.properties` (or read the env
   var) and document it in `.env.example`. Secrets never get a default.
-- Before committing, this must return nothing (except `@author` credits and `LICENSE`):
+- Before committing, this must return nothing (except this line and `LICENSE`):
   `grep -rniE 'DNHS|del norte|powayusd|nighthawk|jm1021|mortensen|AIza|opencodingsociety' --exclude-dir=.git --exclude-dir=target .`
 - A fresh container with an empty `volumes/` must boot, create its schema and seed. Do not
   add startup code that assumes tables already exist.
