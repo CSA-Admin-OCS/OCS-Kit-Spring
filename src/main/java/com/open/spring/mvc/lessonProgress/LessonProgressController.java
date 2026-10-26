@@ -11,10 +11,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/lesson-progress")
-@CrossOrigin(
-    origins = {"http://127.0.0.1:4500", "http://localhost:4500"},
-    allowCredentials = "true"
-)
 public class LessonProgressController {
 
     @Autowired

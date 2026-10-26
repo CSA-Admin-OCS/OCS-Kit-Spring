@@ -6,7 +6,6 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,7 +44,6 @@ public class StudentQueueApiController {
         return new ResponseEntity<>(queueDto.getStudentName() + " was added to " + queueDto.getTeacherEmail(), HttpStatus.CREATED);
     }
 
-    @CrossOrigin(origins = "http://127.0.0.1:4500")
     @DeleteMapping("/remove")
     public ResponseEntity<Object> removeFromQueue(@RequestBody QueueDto queueDto) {
         Optional<StudentQueue> queueEntry = repository.findByTeacherEmail(queueDto.getTeacherEmail());
@@ -64,7 +62,6 @@ public class StudentQueueApiController {
         return new ResponseEntity<>("Queue for " + queueDto.getTeacherEmail() + " not found", HttpStatus.NOT_FOUND);
     }
 
-    @CrossOrigin(origins = "http://127.0.0.1:4500")
     @PostMapping("/approve")
     public ResponseEntity<Object> approveStudent(@RequestBody QueueDto queueDto) {
         Optional<StudentQueue> queueEntry = repository.findByTeacherEmail(queueDto.getTeacherEmail());
@@ -87,7 +84,6 @@ public class StudentQueueApiController {
         return new ResponseEntity<>(repository.findAll(), HttpStatus.OK);
     }
    
-    @CrossOrigin(origins = "http://localhost:8585")
     @GetMapping("/getActive")
     public ResponseEntity<Object> getActiveQueues() {
         return new ResponseEntity<>(repository.findAll(), HttpStatus.OK);

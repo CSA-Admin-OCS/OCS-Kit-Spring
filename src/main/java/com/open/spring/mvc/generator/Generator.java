@@ -8,7 +8,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +20,6 @@ import lombok.Data;
 
 @RestController // Defines this class as a RESTful controller
 @RequestMapping("/generate") // Base URL path for this controller
-@CrossOrigin(origins = "*") // Enables cross-origin requests from any domain
 public class Generator {
 
     private static final Logger logger = LoggerFactory.getLogger(Generator.class);

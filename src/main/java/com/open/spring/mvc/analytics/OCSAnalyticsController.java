@@ -16,7 +16,6 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/ocs-analytics")
-@CrossOrigin(origins = {"http://localhost:8080", "http://localhost:4000", "http://127.0.0.1:4100", "http://localhost:4100", "https://open-coding-society.github.io"}, allowCredentials = "true")
 public class OCSAnalyticsController {
 
     @Autowired

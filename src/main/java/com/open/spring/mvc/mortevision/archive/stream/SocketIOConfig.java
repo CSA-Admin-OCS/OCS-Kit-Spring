@@ -12,9 +12,7 @@ package com.open.spring.mvc.mortevision.archive.stream;
 // import com.corundumstudio.socketio.listener.ConnectListener;
 // import com.corundumstudio.socketio.listener.DisconnectListener;
 // import org.springframework.stereotype.Component;
-// import org.springframework.web.bind.annotation.CrossOrigin;
 
-// @CrossOrigin
 // @Component
 // @Log4j2
 // public class SocketIOConfig {

@@ -26,7 +26,6 @@ import com.open.spring.mvc.person.PersonJpaRepository;
 import com.open.spring.mvc.userStocks.UserStocksRepository;
 import com.open.spring.mvc.userStocks.userStocksTable;
 
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -43,7 +42,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/mining")
 @Transactional
-@CrossOrigin(origins = {"http://localhost:8585", "http://localhost:4500", "http://127.0.0.1:4500"})
 public class MiningController {
     @Autowired
     private PersonJpaRepository personRepository;

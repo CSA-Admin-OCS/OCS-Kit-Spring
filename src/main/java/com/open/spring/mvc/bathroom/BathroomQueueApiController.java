@@ -20,7 +20,6 @@ import com.open.spring.mvc.analytics.OCSAnalytics;
 import com.open.spring.mvc.analytics.OCSAnalyticsRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -219,7 +218,6 @@ public class BathroomQueueApiController {
      *         BAD_REQUEST if student is not at front of queue, or NOT_FOUND if
      *         queue doesn't exist
      */
-    @CrossOrigin(origins = { "*" })
     @PostMapping("/approve")
     @Operation(summary = "Approve the front student in the queue")
     public ResponseEntity<Object> approveStudent(@RequestBody QueueDto queueDto) {
@@ -239,7 +237,6 @@ public class BathroomQueueApiController {
         return new ResponseEntity<>("Queue for " + queueDto.getTeacherEmail() + " not found", HttpStatus.NOT_FOUND);
     }
 
-    @CrossOrigin(origins = { "*" })
     @PostMapping("/updateMaxOccupancy")
     @Operation(summary = "Update maximum occupancy of a queue")
     public ResponseEntity<Object> updateMaxOccupancy(@RequestBody Map<String, Object> payload) {

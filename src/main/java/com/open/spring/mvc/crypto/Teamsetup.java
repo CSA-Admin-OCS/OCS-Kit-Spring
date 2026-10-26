@@ -12,7 +12,6 @@ package com.open.spring.mvc.crypto;
 // import org.springframework.http.ResponseEntity;
 // import org.springframework.security.core.Authentication;
 // import org.springframework.security.core.userdetails.UserDetails;
-// import org.springframework.web.bind.annotation.CrossOrigin;
 // import org.springframework.web.bind.annotation.GetMapping;
 // import org.springframework.web.bind.annotation.PostMapping;
 // import org.springframework.web.bind.annotation.PathVariable;
@@ -22,7 +21,6 @@ package com.open.spring.mvc.crypto;
 // import com.open.spring.mvc.person.PersonJpaRepository;
 
 // @RestController
-// @CrossOrigin(origins = {"*"})
 // public class Teamsetup {
 
 //     @Autowired

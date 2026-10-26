@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/analytics")
-@CrossOrigin(origins = "http://localhost:8080")  // Enable CORS for the frontend URL
 public class AnalyticsApiController {
 
     private static final Logger logger = LoggerFactory.getLogger(AnalyticsApiController.class);

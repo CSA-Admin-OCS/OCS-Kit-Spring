@@ -11,7 +11,6 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/rubrics")
-@CrossOrigin(origins = "*", allowCredentials = "false")
 public class RubricController {
 
     @Autowired

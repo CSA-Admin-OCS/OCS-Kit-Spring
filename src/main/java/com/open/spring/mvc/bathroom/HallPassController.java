@@ -4,7 +4,6 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,7 +33,6 @@ public class HallPassController {
     /**
      * Endpoint to request a hall pass by providing the user's email address.
      */
-    //@CrossOrigin(origins = "http://127.0.0.1:4500")
     @PostMapping("/request")
     @Operation(summary = "Request a hall pass")
     public ResponseEntity<Object> requestHallPass(@RequestBody HallPassRequestDTO request) {
@@ -54,7 +52,6 @@ public class HallPassController {
     /**
      * Endpoint to check out (return) a hall pass.
      */
-    //@CrossOrigin(origins = "http://127.0.0.1:4500")
     @PostMapping("/checkout")
     @Operation(summary = "Checkout a hall pass")
     public ResponseEntity<Object> checkoutHallPass(@RequestParam("email") String emailAddress) {
@@ -67,7 +64,6 @@ public class HallPassController {
     }
 
 
-    @CrossOrigin(origins = "http://127.0.0.1:8080")
     @GetMapping("/getTeacher")
     @Operation(summary = "Get a teacher by first and last name")
     public ResponseEntity<Object> getTeacher(@RequestParam("fname") String firstName, 
@@ -80,7 +76,6 @@ public class HallPassController {
         }
     }
 
-    //@CrossOrigin(origins = "http://127.0.0.1:4500")
     @GetMapping("/getactivepass")
     @Operation(summary = "Get the active pass for a user")
     public ResponseEntity<Object> getPass(@RequestParam("email") String emailAddress) {

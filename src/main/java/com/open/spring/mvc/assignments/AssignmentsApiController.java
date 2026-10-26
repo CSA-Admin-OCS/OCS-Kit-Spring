@@ -261,7 +261,7 @@ public class AssignmentsApiController {
      * @return A list of all the assignments.
      */
     @Transactional
-    @GetMapping("/")
+    @GetMapping({"", "/"})
     public ResponseEntity<?> getAllAssignments() {
         List<Assignment> assignments = assignmentRepo.findAll();
         List<Map<String, String>> simple = new ArrayList<>();

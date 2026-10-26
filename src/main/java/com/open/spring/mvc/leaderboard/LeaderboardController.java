@@ -4,14 +4,13 @@ import com.open.spring.mvc.PauseMenu.ScoreCounter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
 
 /**
  * API Controller for Leaderboard (reads from score_counter table)
- * CORS configured for public access without authentication
+ * CORS comes from the global CORS_ORIGINS setting
  * 
  * Endpoints:
  * - GET /api/leaderboard - Main leaderboard endpoint (all scores)
@@ -21,15 +20,6 @@ import java.util.List;
  * - GET /api/leaderboard/user/{user} - Scores for specific user
  */
 @RestController
-@CrossOrigin(
-    origins = "*",
-    allowedHeaders = "*",
-    methods = {
-        org.springframework.web.bind.annotation.RequestMethod.GET,
-        org.springframework.web.bind.annotation.RequestMethod.OPTIONS
-    },
-    allowCredentials = "false"
-)
 public class LeaderboardController {
     
     @Autowired
