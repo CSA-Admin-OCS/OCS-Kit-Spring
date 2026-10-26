@@ -58,6 +58,8 @@ import javax.sql.DataSource;
 @Component
 public class BackupsController {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BackupsController.class);
+
     // ========== FULL DATABASE BACKUP CONFIGURATION ==========
     private static final String BACKUP_DIR = "./volumes/backups/";
     
@@ -277,19 +279,28 @@ public class BackupsController {
     /**
      * Perform specific endpoint backups on shutdown
      */
-    private void performSpecificEndpointBackups() {
+    List<String> performSpecificEndpointBackups() {
         System.out.println("Backing up specific endpoints...");
         
+        List<String> failed = new ArrayList<>();
         for (BackupEndpoint endpoint : endpoints) {
             try {
                 backupEndpoint(endpoint);
             } catch (Exception e) {
-                System.err.println("Failed to backup endpoint " + endpoint.getPath() + ": " + e.getMessage());
-                e.printStackTrace();
+                // One endpoint failing must not stop the others or flood the shutdown log
+                Throwable root = e;
+                while (root.getCause() != null && root.getCause() != root) {
+                    root = root.getCause();
+                }
+                log.warn("Shutdown backup skipped for {}: {}: {}", endpoint.getPath(),
+                        root.getClass().getSimpleName(), root.getMessage());
+                failed.add(endpoint.getPath());
             }
         }
-        
-        System.out.println("Specific endpoint backups completed.");
+
+        System.out.println("Specific endpoint backups completed"
+                + (failed.isEmpty() ? "." : " (" + failed.size() + " skipped: " + String.join(", ", failed) + ")."));
+        return failed;
     }
 
     /**
@@ -387,7 +398,8 @@ public class BackupsController {
                 }
                 jsonResponse = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(personDtos);
             } else if ("/api/groups/bulk/extract".equals(endpoint.getPath())) {
-                List<Groups> groups = groupsRepository.findAll();
+                // Fetch members in the same query: at shutdown there is no open session for lazy loading
+                List<Groups> groups = groupsRepository.findAllWithMembers();
                 List<Map<String, Object>> groupsList = new ArrayList<>();
                 for (Groups group : groups) {
                     Map<String, Object> groupMap = new HashMap<>();
@@ -455,7 +467,6 @@ public class BackupsController {
             manageFileRotation(backupDir, endpoint.getDirectoryName());
             
         } catch (Exception e) {
-            System.err.println("Error during backup of " + endpoint.getPath() + ": " + e.getMessage());
             throw new RuntimeException("Backup failed for " + endpoint.getPath(), e);
         }
     }
