@@ -1,19 +1,26 @@
 package com.open.spring.system.kit;
 
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
 
 /**
  * Skips @Scheduled jobs and @EventListener methods of disabled features. The owning feature
  * comes from the declaring class's package (kits/catalog.json spring.packages), so new jobs
- * are gated without any per-feature code.
+ * are gated without any per-feature code. Every run asks again, so jobs stop and resume with the
+ * effective features. ApplicationReadyEvent listeners only get one chance, so a disabled one is
+ * deferred until its feature is enabled.
  */
 @Aspect
 @Component
@@ -35,7 +42,29 @@ public class FeatureGateAspect {
 
     @Around("@annotation(org.springframework.context.event.EventListener) && within(com.open.spring..*) && !within(com.open.spring.system..*)")
     public Object eventListener(ProceedingJoinPoint joinPoint) throws Throwable {
+        Class<?> type = joinPoint.getSignature().getDeclaringType();
+        if (!features.isEnabledFor(type) && isStartupListener(joinPoint)) {
+            features.runWhenEnabled(features.featureFor(type),
+                    type.getSimpleName() + "." + joinPoint.getSignature().getName(), () -> proceedLater(joinPoint));
+            return null;
+        }
         return gate(joinPoint, "event listener");
+    }
+
+    private boolean isStartupListener(ProceedingJoinPoint joinPoint) {
+        EventListener listener = AnnotatedElementUtils.findMergedAnnotation(
+                ((MethodSignature) joinPoint.getSignature()).getMethod(), EventListener.class);
+        return listener != null && List.of(listener.classes()).contains(ApplicationReadyEvent.class);
+    }
+
+    private void proceedLater(ProceedingJoinPoint joinPoint) throws Exception {
+        try {
+            joinPoint.proceed();
+        } catch (Exception e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new IllegalStateException(t);
+        }
     }
 
     private Object gate(ProceedingJoinPoint joinPoint, String kind) throws Throwable {

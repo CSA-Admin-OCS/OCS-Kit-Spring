@@ -15,8 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * GET /api/kit (public): kit, enabled features, role labels, so frontends can hide what is off.
- * /api/kit/admin (ROLE_ADMIN only): feature sources, setup guides and readiness, and runtime
- * on/off overrides. Only admins may change features (canonical feature_management).
+ * /api/kit/admin (ROLE_ADMIN only): feature sources, setup guides, readiness and kit presets, plus
+ * applying a whole kit and per-feature on/off overrides at runtime. Only admins may change
+ * features (canonical feature_management).
  */
 @RestController
 public class KitApiController {
@@ -50,6 +51,23 @@ public class KitApiController {
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public Map<String, Object> clear(@PathVariable String id, Principal principal) {
         features.clearOverride(id, principal.getName());
+        return features.describeAdmin();
+    }
+
+    /** Body: {"kit": "vanilla|education|business"}. Clears all overrides; accounts and data stay. */
+    @PutMapping("/api/kit/admin/kit")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public Map<String, Object> applyKit(@RequestBody Map<String, Object> body, Principal principal) {
+        Object kit = body == null ? null : body.get("kit");
+        features.applyKit(kit instanceof String id ? id : null, principal.getName());
+        return features.describeAdmin();
+    }
+
+    /** Forgets the applied kit and all overrides, returning to the server's KIT/FEATURES. */
+    @DeleteMapping("/api/kit/admin/kit")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public Map<String, Object> forgetKit(Principal principal) {
+        features.forgetKit(principal.getName());
         return features.describeAdmin();
     }
 

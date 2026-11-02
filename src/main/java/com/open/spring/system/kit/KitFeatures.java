@@ -25,9 +25,10 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * The effective kit features: KIT preset, then FEATURES, then admin overrides (feature_override
- * table). Everything that gates on features asks this bean at the moment it needs the answer,
- * so admin changes take effect without a restart.
+ * The effective kit features. With a kit applied by an admin (active_kit table): its preset, then
+ * admin overrides (feature_override table), ignoring KIT and FEATURES. Otherwise: KIT preset, then
+ * FEATURES, then admin overrides. core is always on. Everything that gates on features asks this
+ * bean at the moment it needs the answer, so admin changes take effect without a restart.
  *
  * Ask by feature id, by class (the catalog maps packages to features) or by request path.
  * Templates use it as {@code ${@kitFeatures.pathEnabled('/mvc/bank/read')}}.
@@ -47,15 +48,18 @@ public class KitFeatures {
     }
 
     private final KitCatalog catalog;
-    private final KitResolver.Resolution resolution;
-    private final Set<String> preset;
+    private final KitResolver.Resolution envResolution;
+    private final Set<String> envPreset;
     private final Function<String, String> settings;
     private final ObjectProvider<FeatureOverrideStore> storeProvider;
     private final ApplicationEventPublisher events;
     private final Map<String, List<Task>> deferred = new ConcurrentHashMap<>();
 
-    private volatile Map<String, FeatureOverride> overrides = Map.of();
-    private volatile Set<String> enabled;
+    private volatile State state;
+
+    /** Everything derived from the admin's choices, swapped as one so readers never see a half-applied switch. */
+    private record State(ActiveKit stored, String kit, Set<String> preset, Set<String> base,
+                         Map<String, FeatureOverride> overrides, Set<String> enabled) { }
 
     @Autowired
     public KitFeatures(Environment environment, ObjectProvider<FeatureOverrideStore> store, ApplicationEventPublisher events) {
@@ -67,13 +71,14 @@ public class KitFeatures {
     public KitFeatures(KitCatalog catalog, String kit, String features, Function<String, String> settings,
                        ObjectProvider<FeatureOverrideStore> store, ApplicationEventPublisher events) {
         this.catalog = catalog;
-        this.resolution = KitResolver.resolve(catalog, kit, features);
-        KitCatalog.Kit presetKit = catalog.kits().get(resolution.kit());
-        this.preset = Set.copyOf(presetKit == null ? catalog.features().keySet() : catalog.expand(presetKit));
+        this.envResolution = KitResolver.resolve(catalog, kit, features);
+        this.envPreset = presetOf(catalog.kits().get(envResolution.kit()));
         this.settings = settings;
         this.storeProvider = store;
         this.events = events;
-        this.enabled = Set.copyOf(resolution.enabled());
+        this.state = stateFor(null, Map.of());
+        // Stays the KIT account set even after a runtime switch: Person.init() also tells which
+        // existing accounts are protected defaults, and switching never creates or renames accounts.
         KitSeedAccounts.activate(KitSeedAccounts.forKit(catalog, roleKit()));
     }
 
@@ -84,7 +89,7 @@ public class KitFeatures {
 
     // ------------------------------------------------------------------ startup
 
-    /** Loads admin overrides once the database is ready, then logs the effective features. */
+    /** Loads the applied kit and admin overrides once the database is ready, then logs the effective features. */
     @EventListener(ContextRefreshedEvent.class)
     public void onStartup() {
         reloadOverrides();
@@ -96,8 +101,10 @@ public class KitFeatures {
         if (store == null) {
             return;
         }
+        ActiveKit stored;
         Map<String, FeatureOverride> loaded = new LinkedHashMap<>();
         try {
+            stored = store.loadActiveKit().orElse(null);
             for (FeatureOverride override : store.loadAll()) {
                 if (catalog.features().containsKey(override.getFeatureId())) {
                     loaded.put(override.getFeatureId(), override);
@@ -106,16 +113,20 @@ public class KitFeatures {
                 }
             }
         } catch (RuntimeException e) {
-            log.warn("Could not load admin feature overrides, using KIT/FEATURES only: {}", e.getMessage());
+            log.warn("Could not load admin kit and feature overrides, using KIT/FEATURES only: {}", e.getMessage());
             return;
         }
-        overrides = Collections.unmodifiableMap(loaded);
-        recompute();
+        if (stored != null && !catalog.kits().containsKey(stored.getKitId())) {
+            log.warn("Ignoring stored kit '{}': not in the catalog, using KIT/FEATURES", stored.getKitId());
+            stored = null;
+        }
+        state = stateFor(stored, Collections.unmodifiableMap(loaded));
     }
 
     private void logState() {
-        log.info("Kit '{}' ({}){}: {} of {} features enabled", resolution.kit(), kitName(),
-                resolution.customized() ? " customized by FEATURES" : "", enabled.size(), catalog.features().size());
+        State current = state;
+        log.info("Kit '{}' ({}, source: {}){}: {} of {} features enabled", current.kit(), kitName(), kitSource(),
+                isCustomized() ? " customized" : "", current.enabled().size(), catalog.features().size());
         for (KitCatalog.Feature feature : catalog.features().values()) {
             log.info("  [{}] {} - {} ({}; labels: {}; source: {})", isEnabled(feature.id()) ? "on " : "off",
                     feature.id(), feature.name(), feature.category(), String.join(", ", feature.labels()),
@@ -129,24 +140,38 @@ public class KitFeatures {
         return catalog;
     }
 
-    /** Kit id from KIT, or "default" when unset. */
+    /** Active kit id: the one an admin applied, else KIT, else "default". */
     public String getKit() {
-        return resolution.kit();
+        return state.kit();
     }
 
     public String kitName() {
-        KitCatalog.Kit kit = catalog.kits().get(resolution.kit());
+        KitCatalog.Kit kit = catalog.kits().get(state.kit());
         return kit == null ? "All features" : kit.name();
+    }
+
+    /** Where the active kit comes from: "admin" (stored), "env" (KIT) or "default" (KIT unset). */
+    public String kitSource() {
+        if (state.stored() != null) {
+            return "admin";
+        }
+        return KitResolver.DEFAULT_KIT.equals(envResolution.kit()) ? "default" : "env";
+    }
+
+    /** Whether the effective features differ from the active kit's preset. */
+    public boolean isCustomized() {
+        State current = state;
+        return !current.enabled().equals(current.preset());
     }
 
     /** Enabled feature ids in catalog order. */
     public List<String> getEnabled() {
-        Set<String> current = enabled;
+        Set<String> current = state.enabled();
         return catalog.features().keySet().stream().filter(current::contains).toList();
     }
 
     public boolean isEnabled(String featureId) {
-        return enabled.contains(featureId);
+        return state.enabled().contains(featureId);
     }
 
     /** Whether the feature owning this class (by package) is enabled; classes outside the app are always enabled. */
@@ -173,15 +198,16 @@ public class KitFeatures {
 
     /** Where a feature's current state comes from: "admin" override, "env" (FEATURES) or the "kit" preset. */
     public String source(String featureId) {
-        if (overrides.containsKey(featureId)) {
+        State current = state;
+        if (current.overrides().containsKey(featureId)) {
             return "admin";
         }
-        return resolution.enabled().contains(featureId) != preset.contains(featureId) ? "env" : "kit";
+        return current.base().contains(featureId) != current.preset().contains(featureId) ? "env" : "kit";
     }
 
-    /** The kit whose role labels and seed uids apply (education's when KIT is unset). */
+    /** The kit whose role labels and signup role apply: the active kit (education's when none is set). */
     public KitCatalog.Kit roleKit() {
-        KitCatalog.Kit kit = catalog.kits().get(resolution.kit());
+        KitCatalog.Kit kit = catalog.kits().get(state.kit());
         if (kit == null || kit.roles().isEmpty()) {
             kit = catalog.kits().getOrDefault(FALLBACK_ROLE_KIT, catalog.kits().values().iterator().next());
         }
@@ -194,7 +220,7 @@ public class KitFeatures {
         return role == null ? canonicalRole : role.label();
     }
 
-    /** Label for a Spring authority such as ROLE_TEACHER, using the kit's role names. */
+    /** Label for a Spring authority such as ROLE_TEACHER, using the active kit's role names. */
     public String authorityLabel(String authority) {
         for (Map.Entry<String, List<String>> entry : catalog.roleAuthorities().entrySet()) {
             List<String> authorities = entry.getValue();
@@ -226,7 +252,7 @@ public class KitFeatures {
             }
         }
         FeatureOverrideStore store = requireStore();
-        Map<String, FeatureOverride> updated = new LinkedHashMap<>(overrides);
+        Map<String, FeatureOverride> updated = new LinkedHashMap<>(state.overrides());
         Instant now = Instant.now();
         for (Map.Entry<String, Boolean> change : changes.entrySet()) {
             FeatureOverride override = new FeatureOverride(change.getKey(), change.getValue(), actor, now);
@@ -234,35 +260,70 @@ public class KitFeatures {
             updated.put(change.getKey(), override);
             log.info("Feature '{}' {} by {} at {}", change.getKey(), change.getValue() ? "enabled" : "disabled", actor, now);
         }
-        commit(updated);
+        commit(state.stored(), updated);
     }
 
-    /** Removes an admin override so the feature falls back to KIT/FEATURES. */
+    /** Removes an admin override so the feature falls back to the active kit (or KIT/FEATURES). */
     public synchronized void clearOverride(String featureId, String actor) {
         requireFeature(featureId);
         requireStore().delete(featureId);
-        Map<String, FeatureOverride> updated = new LinkedHashMap<>(overrides);
+        Map<String, FeatureOverride> updated = new LinkedHashMap<>(state.overrides());
         updated.remove(featureId);
         log.info("Admin override for feature '{}' cleared by {} at {}", featureId, actor, Instant.now());
-        commit(updated);
+        commit(state.stored(), updated);
     }
 
-    private void commit(Map<String, FeatureOverride> updated) {
-        Set<String> before = enabled;
-        overrides = Collections.unmodifiableMap(updated);
-        recompute();
+    /**
+     * Applies a whole kit preset: stores it (with who and when), clears every feature override and
+     * starts what the preset newly enables. Accounts and data are left alone; features it turns
+     * off are only gated, and their jobs resume when they come back.
+     */
+    public synchronized void applyKit(String kitId, String actor) {
+        if (kitId == null || !catalog.kits().containsKey(kitId)) {
+            throw new IllegalArgumentException("Unknown kit '" + kitId + "'. Valid kits: "
+                    + String.join(", ", catalog.kits().keySet()));
+        }
+        ActiveKit kit = new ActiveKit(kitId, actor, Instant.now());
+        requireStore().applyKit(kit);
+        log.info("Kit '{}' applied by {} at {}; feature overrides cleared", kitId, actor, kit.getUpdatedAt());
+        commit(kit, Map.of());
+    }
+
+    /** Forgets the applied kit and every override, returning to the KIT/FEATURES configuration. */
+    public synchronized void forgetKit(String actor) {
+        requireStore().forgetKit();
+        log.info("Applied kit and feature overrides cleared by {} at {}; back to KIT/FEATURES", actor, Instant.now());
+        commit(null, Map.of());
+    }
+
+    private void commit(ActiveKit stored, Map<String, FeatureOverride> updated) {
+        Set<String> before = state.enabled();
+        state = stateFor(stored, Collections.unmodifiableMap(updated));
         for (String id : getEnabled()) {
             if (!before.contains(id)) {
                 runDeferred(id);
-                if (events != null) {
-                    events.publishEvent(new FeatureEnabledEvent(id));
-                }
+                announceEnabled(id);
             }
         }
     }
 
-    private void recompute() {
-        Set<String> next = new LinkedHashSet<>(resolution.enabled());
+    /** The change is already saved, so a failing seeder is logged rather than failing the request. */
+    private void announceEnabled(String featureId) {
+        if (events == null) {
+            return;
+        }
+        try {
+            events.publishEvent(new FeatureEnabledEvent(featureId));
+        } catch (RuntimeException e) {
+            log.warn("Seeding for newly enabled feature '{}' failed: {}", featureId, e.getMessage());
+        }
+    }
+
+    private State stateFor(ActiveKit stored, Map<String, FeatureOverride> overrides) {
+        String kit = stored != null ? stored.getKitId() : envResolution.kit();
+        Set<String> preset = stored != null ? presetOf(catalog.kits().get(kit)) : envPreset;
+        Set<String> base = stored != null ? preset : Set.copyOf(envResolution.enabled());
+        Set<String> next = new LinkedHashSet<>(base);
         for (FeatureOverride override : overrides.values()) {
             if (override.isEnabled()) {
                 next.add(override.getFeatureId());
@@ -271,7 +332,14 @@ public class KitFeatures {
             }
         }
         catalog.features().values().stream().filter(KitCatalog.Feature::alwaysOn).forEach(f -> next.add(f.id()));
-        enabled = Set.copyOf(next);
+        return new State(stored, kit, preset, base, overrides, Set.copyOf(next));
+    }
+
+    /** A kit's feature ids plus the always-on ones; every feature when there is no kit (KIT unset). */
+    private Set<String> presetOf(KitCatalog.Kit kit) {
+        Set<String> preset = new LinkedHashSet<>(kit == null ? catalog.features().keySet() : catalog.expand(kit));
+        catalog.features().values().stream().filter(KitCatalog.Feature::alwaysOn).forEach(f -> preset.add(f.id()));
+        return Set.copyOf(preset);
     }
 
     private KitCatalog.Feature requireFeature(String featureId) {
@@ -340,7 +408,7 @@ public class KitFeatures {
             d.put("always_on", feature.alwaysOn());
             d.put("description", feature.description());
             d.put("source", source(feature.id()));
-            FeatureOverride override = overrides.get(feature.id());
+            FeatureOverride override = state.overrides().get(feature.id());
             if (override != null) {
                 d.put("updated_by", override.getUpdatedBy());
                 d.put("updated_at", override.getUpdatedAt() == null ? null : override.getUpdatedAt().toString());
@@ -353,13 +421,30 @@ public class KitFeatures {
         }
         body.put("feature_details", details);
         body.putAll(roles());
+        body.put("presets", presets());
         return body;
+    }
+
+    /** Every kit preset in the catalog, so a dashboard can show what applying one would do. */
+    private Map<String, Object> presets() {
+        Map<String, Object> presets = new LinkedHashMap<>();
+        for (KitCatalog.Kit kit : catalog.kits().values()) {
+            Map<String, Object> preset = new LinkedHashMap<>();
+            preset.put("name", kit.name());
+            preset.put("description", kit.description());
+            preset.put("features", catalog.expand(kit));
+            preset.put("roles", roleLabels(kit));
+            presets.put(kit.id(), preset);
+        }
+        return presets;
     }
 
     private Map<String, Object> header() {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("kit", resolution.kit());
+        body.put("kit", getKit());
         body.put("kit_name", kitName());
+        body.put("kit_source", kitSource());
+        body.put("customized", isCustomized());
         body.put("features", getEnabled());
         return body;
     }
@@ -376,14 +461,18 @@ public class KitFeatures {
 
     private Map<String, Object> roles() {
         KitCatalog.Kit kit = roleKit();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roles", roleLabels(kit));
+        body.put("signup_role", kit.signupRole());
+        return body;
+    }
+
+    private Map<String, Object> roleLabels(KitCatalog.Kit kit) {
         Map<String, Object> roles = new LinkedHashMap<>();
         for (KitCatalog.Role role : kit.roles().values()) {
             roles.put(role.id(), Map.of("label", role.label()));
         }
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("roles", roles);
-        body.put("signup_role", kit.signupRole());
-        return body;
+        return roles;
     }
 
     /** Spring settings only, each reported as configured true/false; "ready" = all required ones configured. */
