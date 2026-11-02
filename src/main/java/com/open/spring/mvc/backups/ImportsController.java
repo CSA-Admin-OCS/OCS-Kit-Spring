@@ -72,7 +72,7 @@ public class ImportsController {
     private static final String LOG_FILE_PATH = "./volumes/logs/restore_operations.log";
 
     // ========== SPECIFIC ENDPOINT IMPORT CONFIGURATION ==========
-    @Value("${backup.base.path:./backups}")
+    @Value("${backup.base.path:./volumes/backups}")
     private String backupBasePath;
 
     @Value("${server.port:8585}")
@@ -88,6 +88,9 @@ public class ImportsController {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired(required = false)
+    private com.open.spring.system.kit.KitFeatures kitFeatures;
 
     // Configuration for import endpoints and their corresponding directories
     private final List<ImportEndpoint> endpoints = Arrays.asList(
@@ -494,10 +497,18 @@ public class ImportsController {
             // SECOND PASS: Process all the data normally
             sanitizeAndProcessData(data, true);
             
+            reloadKitState();
             return "Data imported successfully from uploaded file: " + file.getOriginalFilename();
         } catch (Exception e) {
             e.printStackTrace();
             return "Failed to import data: " + e.getMessage();
+        }
+    }
+
+    /** A full restore can replace the applied kit and feature overrides; use them without a restart. */
+    private void reloadKitState() {
+        if (kitFeatures != null) {
+            kitFeatures.reloadOverrides();
         }
     }
 
@@ -534,6 +545,7 @@ public class ImportsController {
                     sanitizeAndProcessData(data, true);
                     
                     connection.commit();
+                    reloadKitState();
                     return "Data imported successfully from JSON file: " + jsonFile.getAbsolutePath();
                 }
             } catch (SQLException e) {

@@ -64,7 +64,8 @@ public class BackupsController {
     private static final String BACKUP_DIR = "./volumes/backups/";
     
     // ========== SPECIFIC ENDPOINT BACKUP CONFIGURATION ==========
-    @Value("${backup.base.path:./backups}")
+    // Under volumes/ so the backups survive replacing the container
+    @Value("${backup.base.path:./volumes/backups}")
     private String backupBasePath;
 
     @Value("${backup.max.files:3}")

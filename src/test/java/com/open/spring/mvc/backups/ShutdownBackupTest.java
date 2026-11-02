@@ -15,6 +15,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.open.spring.mvc.bank.BankJpaRepository;
@@ -60,6 +61,14 @@ class ShutdownBackupTest {
         ReflectionTestUtils.setField(controller, "bankRepository", bank);
         ReflectionTestUtils.setField(controller, "backupBasePath", backups.toString());
         ReflectionTestUtils.setField(controller, "maxBackupFiles", 3);
+    }
+
+    @Test
+    void endpointBackupsDefaultToTheMountedVolume() throws NoSuchFieldException {
+        for (Class<?> type : List.of(BackupsController.class, ImportsController.class)) {
+            String setting = type.getDeclaredField("backupBasePath").getAnnotation(Value.class).value();
+            assertThat(setting).isEqualTo("${backup.base.path:./volumes/backups}");
+        }
     }
 
     @Test
