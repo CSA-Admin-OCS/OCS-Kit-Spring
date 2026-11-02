@@ -75,6 +75,8 @@ group-chat websocket.
 Set `KIT` in `.env` to pick a preset. Every feature's code ships in the image; a disabled
 feature answers 404 on its URLs, its scheduled jobs and startup seeders do not run, and its
 admin nav links are hidden. Its tables are still created, so turning it on later just works.
+`KIT` is only the starting point: an admin can apply another kit at runtime, see
+[Switching kits at runtime](#switching-kits-at-runtime).
 
 | Kit | For | Roles (admin / staff / member) |
 |---|---|---|
@@ -107,7 +109,8 @@ the log lists the kit and every feature as `[on ]`/`[off]` with its category, la
 where the setting came from. `GET /api/kit` (public) returns the same for frontends:
 
 ```json
-{"kit": "education", "kit_name": "OCS Education", "features": ["core", "lessons", ...],
+{"kit": "education", "kit_name": "OCS Education", "kit_source": "env", "customized": false, "degraded": false,
+ "features": ["core", "lessons", ...],
  "feature_details": [{"id": "core", "name": "Core platform", "category": "core", "labels": [...], "enabled": true}, ...],
  "roles": {"admin": {"label": "Admin"}, "staff": {"label": "Teacher"}, "member": {"label": "Student"}},
  "signup_role": "member"}
@@ -119,11 +122,14 @@ Each kit names the three canonical roles differently and seeds one account per r
 (`ADMIN_*`, `TEACHER_*` and `USER_*` in `.env` set the admin, staff and member accounts and
 override the kit's default uid/name/email). Internally the roles stay `ROLE_ADMIN`,
 `ROLE_TEACHER` (staff) and `ROLE_STUDENT` (member), all with `ROLE_USER`; only the labels
-in the admin UI and `/api/kit` change. New sign-ups get the kit's `signup_role`.
+in the admin UI and `/api/kit` change. New sign-ups get the active kit's `signup_role`.
+Seed accounts are only created on an empty database, from `KIT`; switching kits later neither
+creates nor renames accounts.
 
 ## Customizing features
 
-Three layers, later ones win:
+Three layers, later ones win (a kit applied at runtime replaces layers 1 and 2, see
+[below](#switching-kits-at-runtime)):
 
 1. `KIT` picks the preset.
 2. `FEATURES` in `.env` adjusts it at startup:
@@ -147,7 +153,41 @@ Three layers, later ones win:
    (summary, the Spring settings with `configured: true/false` - never their values - steps,
    how to verify) and `ready` (all required settings present). Changes are logged with the
    admin's uid and time. Enabling a feature at runtime seeds its sample data if its tables
-   are empty and runs any startup task it skipped.
+   are empty and runs any startup task it skipped. Seeding never creates accounts.
+
+### Switching kits at runtime
+
+An admin can apply a whole kit, so a site started as Vanilla can become Education or Business
+and back, then keep customizing. No restart or rebuild, and sessions stay valid.
+
+```bash
+curl -b "jwt_java_spring=$TOKEN" -X PUT http://localhost:8585/api/kit/admin/kit \
+     -H 'Content-Type: application/json' -d '{"kit": "education"}'    # vanilla, education or business
+curl -b "jwt_java_spring=$TOKEN" -X DELETE http://localhost:8585/api/kit/admin/kit   # back to KIT/FEATURES
+```
+
+Both are `ROLE_ADMIN` only (401 anonymous, 403 others; an unknown kit is 400) and return the
+`/api/kit/admin` payload.
+
+- **PUT** stores the kit in the `active_kit` table with who and when, clears all feature
+  overrides, and seeds and starts newly enabled features whose tables are empty.
+- **DELETE** forgets the stored kit and all overrides.
+- **Precedence**: with a stored kit, its preset then admin overrides; `KIT` and `FEATURES` are
+  ignored (though still validated at startup, since DELETE returns to them). Otherwise `KIT`,
+  then `FEATURES`, then admin overrides. `core` is always on.
+- **Nothing is deleted or changed**: uids and internal roles stay and only labels change. A
+  disabled feature answers 404 and keeps its data; its scheduled jobs stop and resume with it.
+
+`GET /api/kit` and `/api/kit/admin` report the effective state: `kit`, `kit_name`, `roles` and
+`signup_role` of the active kit, `kit_source` (`admin` stored, `env` from `KIT`, `default` when
+`KIT` is unset) and `customized` (features differ from the preset). `/api/kit/admin` adds
+`presets`, each kit's name, description, features and role labels from the catalog. Under a
+stored kit a feature's `source` is `kit` or, for an override, `admin`.
+
+If the stored settings cannot be read, the site fails closed instead of reviving features an
+admin turned off: only `core` is enabled, both endpoints report `degraded: true`,
+`/api/kit/admin` adds `degraded_reason`, changes answer 503, and the read is retried every 30
+seconds. An empty database is not a failure: `KIT`/`FEATURES` apply.
 
 ## Adding a new feature
 
@@ -164,6 +204,12 @@ Three layers, later ones win:
 4. Run `./mvnw test`. `KitCatalogValidationTest` fails if a package or endpoint is not mapped,
    if two features claim the same package or prefix, or if the catalog drifted from the
    canonical one.
+
+## Backups
+
+On shutdown the server writes a full database export to `volumes/backups/backup_<time>.json`
+and per-endpoint exports to `volumes/backups/<endpoint>/`, keeping the latest few of each, so
+they survive replacing the container. `backup.base.path` moves the per-endpoint ones.
 
 ## Database
 
