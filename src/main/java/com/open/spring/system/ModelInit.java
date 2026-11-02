@@ -215,12 +215,6 @@ public class ModelInit {
                     }
                     
                     personDetailsService.save(person);
-                    
-                    if (kitFeatures.isEnabledFor(Note.class)) {
-                        String text = "Test " + person.getEmail();
-                        Note n = new Note(text, person);
-                        noteRepo.save(n);
-                    }
                 }
             }
 
@@ -251,6 +245,7 @@ public class ModelInit {
         return List.of(
             new Seed(Announcement.class, announcementJPA::count, this::seedAnnouncements),
             new Seed(Comment.class, CommentJPA::count, this::seedComments),
+            new Seed(Note.class, noteRepo::count, this::seedNotes),
             new Seed(Jokes.class, jokesRepo::count, this::seedJokes),
             new Seed(BathroomQueue.class, queueJPA::count, this::seedBathroomQueues),
             new Seed(StudentQueue.class, studentQueueJPA::count, this::seedStudentQueues),
@@ -265,7 +260,7 @@ public class ModelInit {
             new Seed(Game.class, gameJpaRepository::count, this::seedGames));
     }
 
-    /** An admin enabled a feature at runtime: seed its tables that are still empty. */
+    /** A feature was enabled at runtime (override or kit switch): seed its tables that are still empty. */
     @EventListener
     public void onFeatureEnabled(FeatureEnabledEvent event) {
         for (Seed seed : seeds()) {
@@ -299,6 +294,16 @@ public class ModelInit {
             List<Comment> CommentFound = CommentJPA.findByAssignment(Comment.getAssignment());
             if (CommentFound.isEmpty()) {
                 CommentJPA.save(new Comment(Comment.getAssignment(), Comment.getAuthor(), Comment.getText())); // JPA save
+            }
+        }
+    }
+
+    // A note for each seed account that exists; other accounts are left alone
+    private void seedNotes() {
+        for (Person seed : Person.init()) {
+            Person person = personJpaRepository.findByEmail(seed.getEmail());
+            if (person != null) {
+                noteRepo.save(new Note("Test " + person.getEmail(), person));
             }
         }
     }
