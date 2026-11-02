@@ -4,6 +4,7 @@ import java.security.Principal;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -69,6 +70,12 @@ public class KitApiController {
     public Map<String, Object> forgetKit(Principal principal) {
         features.forgetKit(principal.getName());
         return features.describeAdmin();
+    }
+
+    /** Handled here because the global advice answers 500 for its JSON cause. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, String>> unreadableBody(HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", "The request body must be valid JSON"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
