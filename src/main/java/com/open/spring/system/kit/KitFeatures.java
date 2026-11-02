@@ -15,11 +15,11 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,13 +30,22 @@ import com.fasterxml.jackson.databind.JsonNode;
  * FEATURES, then admin overrides. core is always on. Everything that gates on features asks this
  * bean at the moment it needs the answer, so admin changes take effect without a restart.
  *
+ * If the stored choices cannot be read, features an admin turned off must not come back, so the
+ * site fails closed: only always-on features, reported as degraded, changes refused, and the read
+ * retried until it succeeds. An empty database is not a failure; that just means KIT/FEATURES.
+ *
  * Ask by feature id, by class (the catalog maps packages to features) or by request path.
  * Templates use it as {@code ${@kitFeatures.pathEnabled('/mvc/bank/read')}}.
  */
 @Component("kitFeatures")
-public class KitFeatures {
+public class KitFeatures implements SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(KitFeatures.class);
+
+    /** Safe to show admins: the cause (which can hold connection details) only goes to the log. */
+    static final String DEGRADED_REASON = "The stored kit and feature settings could not be read from the database. "
+            + "Only always-on features are enabled, and changes are refused, until it recovers.";
+    private static final long DEGRADED_RETRY_MILLIS = 30_000;
 
     /** Kit whose role labels apply when KIT is unset (the platform's original classroom roles). */
     static final String FALLBACK_ROLE_KIT = "education";
@@ -59,7 +68,7 @@ public class KitFeatures {
 
     /** Everything derived from the admin's choices, swapped as one so readers never see a half-applied switch. */
     private record State(ActiveKit stored, String kit, Set<String> preset, Set<String> base,
-                         Map<String, FeatureOverride> overrides, Set<String> enabled) { }
+                         Map<String, FeatureOverride> overrides, Set<String> enabled, boolean degraded) { }
 
     @Autowired
     public KitFeatures(Environment environment, ObjectProvider<FeatureOverrideStore> store, ApplicationEventPublisher events) {
@@ -89,11 +98,22 @@ public class KitFeatures {
 
     // ------------------------------------------------------------------ startup
 
-    /** Loads the applied kit and admin overrides once the database is ready, then logs the effective features. */
-    @EventListener(ContextRefreshedEvent.class)
-    public void onStartup() {
+    /**
+     * Loads the applied kit and admin overrides once the database is ready, then logs the effective
+     * features. Runs before the web server starts, so no request sees a state that ignores them.
+     */
+    @Override
+    public void afterSingletonsInstantiated() {
         reloadOverrides();
         logState();
+    }
+
+    /** Requests never wait on the database for this: they keep seeing the degraded state meanwhile. */
+    @Scheduled(fixedDelay = DEGRADED_RETRY_MILLIS, initialDelay = DEGRADED_RETRY_MILLIS)
+    public void retryIfDegraded() {
+        if (state.degraded()) {
+            reloadOverrides();
+        }
     }
 
     public synchronized void reloadOverrides() {
@@ -113,14 +133,43 @@ public class KitFeatures {
                 }
             }
         } catch (RuntimeException e) {
-            log.warn("Could not load admin kit and feature overrides, using KIT/FEATURES only: {}", e.getMessage());
+            enterDegraded(e);
             return;
         }
         if (stored != null && !catalog.kits().containsKey(stored.getKitId())) {
             log.warn("Ignoring stored kit '{}': not in the catalog, using KIT/FEATURES", stored.getKitId());
             stored = null;
         }
-        state = stateFor(stored, Collections.unmodifiableMap(loaded));
+        if (state.degraded()) {
+            // Startup tasks were deferred meanwhile, so recovering is enabling the features again.
+            log.info("Stored kit and feature settings are readable again; restoring them");
+            commit(stored, loaded);
+        } else {
+            state = stateFor(stored, Collections.unmodifiableMap(loaded));
+        }
+    }
+
+    private void enterDegraded(RuntimeException cause) {
+        State current = state;
+        if (current.degraded()) {
+            log.debug("Stored kit and feature settings are still unreadable: {}", cause.getMessage());
+            return;
+        }
+        log.error("Could not read the stored kit and feature settings; enabling only always-on features and retrying", cause);
+        Set<String> alwaysOn = new LinkedHashSet<>();
+        catalog.features().values().stream().filter(KitCatalog.Feature::alwaysOn).forEach(f -> alwaysOn.add(f.id()));
+        state = new State(current.stored(), current.kit(), current.preset(), current.base(), current.overrides(),
+                Set.copyOf(alwaysOn), true);
+    }
+
+    /** Changes build on the stored choices, so they need those to be known. */
+    private void requireReadableState() {
+        if (state.degraded()) {
+            reloadOverrides();
+        }
+        if (state.degraded()) {
+            throw new KitStateUnavailableException(DEGRADED_REASON);
+        }
     }
 
     private void logState() {
@@ -158,10 +207,15 @@ public class KitFeatures {
         return KitResolver.DEFAULT_KIT.equals(envResolution.kit()) ? "default" : "env";
     }
 
-    /** Whether the effective features differ from the active kit's preset. */
+    /** Whether the effective features differ from the active kit's preset (not while degraded: nothing was chosen). */
     public boolean isCustomized() {
         State current = state;
-        return !current.enabled().equals(current.preset());
+        return !current.degraded() && !current.enabled().equals(current.preset());
+    }
+
+    /** True while the stored choices cannot be read and only always-on features are enabled. */
+    public boolean isDegraded() {
+        return state.degraded();
     }
 
     /** Enabled feature ids in catalog order. */
@@ -252,12 +306,14 @@ public class KitFeatures {
             }
         }
         FeatureOverrideStore store = requireStore();
+        requireReadableState();
         Map<String, FeatureOverride> updated = new LinkedHashMap<>(state.overrides());
         Instant now = Instant.now();
         for (Map.Entry<String, Boolean> change : changes.entrySet()) {
-            FeatureOverride override = new FeatureOverride(change.getKey(), change.getValue(), actor, now);
-            store.save(override);
-            updated.put(change.getKey(), override);
+            updated.put(change.getKey(), new FeatureOverride(change.getKey(), change.getValue(), actor, now));
+        }
+        store.saveAll(changes.keySet().stream().map(updated::get).toList());
+        for (Map.Entry<String, Boolean> change : changes.entrySet()) {
             log.info("Feature '{}' {} by {} at {}", change.getKey(), change.getValue() ? "enabled" : "disabled", actor, now);
         }
         commit(state.stored(), updated);
@@ -266,7 +322,9 @@ public class KitFeatures {
     /** Removes an admin override so the feature falls back to the active kit (or KIT/FEATURES). */
     public synchronized void clearOverride(String featureId, String actor) {
         requireFeature(featureId);
-        requireStore().delete(featureId);
+        FeatureOverrideStore store = requireStore();
+        requireReadableState();
+        store.delete(featureId);
         Map<String, FeatureOverride> updated = new LinkedHashMap<>(state.overrides());
         updated.remove(featureId);
         log.info("Admin override for feature '{}' cleared by {} at {}", featureId, actor, Instant.now());
@@ -284,14 +342,18 @@ public class KitFeatures {
                     + String.join(", ", catalog.kits().keySet()));
         }
         ActiveKit kit = new ActiveKit(kitId, actor, Instant.now());
-        requireStore().applyKit(kit);
+        FeatureOverrideStore store = requireStore();
+        requireReadableState();
+        store.applyKit(kit);
         log.info("Kit '{}' applied by {} at {}; feature overrides cleared", kitId, actor, kit.getUpdatedAt());
         commit(kit, Map.of());
     }
 
     /** Forgets the applied kit and every override, returning to the KIT/FEATURES configuration. */
     public synchronized void forgetKit(String actor) {
-        requireStore().forgetKit();
+        FeatureOverrideStore store = requireStore();
+        requireReadableState();
+        store.forgetKit();
         log.info("Applied kit and feature overrides cleared by {} at {}; back to KIT/FEATURES", actor, Instant.now());
         commit(null, Map.of());
     }
@@ -332,7 +394,7 @@ public class KitFeatures {
             }
         }
         catalog.features().values().stream().filter(KitCatalog.Feature::alwaysOn).forEach(f -> next.add(f.id()));
-        return new State(stored, kit, preset, base, overrides, Set.copyOf(next));
+        return new State(stored, kit, preset, base, overrides, Set.copyOf(next), false);
     }
 
     /** A kit's feature ids plus the always-on ones; every feature when there is no kit (KIT unset). */
@@ -422,6 +484,9 @@ public class KitFeatures {
         body.put("feature_details", details);
         body.putAll(roles());
         body.put("presets", presets());
+        if (isDegraded()) {
+            body.put("degraded_reason", DEGRADED_REASON);
+        }
         return body;
     }
 
@@ -445,6 +510,7 @@ public class KitFeatures {
         body.put("kit_name", kitName());
         body.put("kit_source", kitSource());
         body.put("customized", isCustomized());
+        body.put("degraded", isDegraded());
         body.put("features", getEnabled());
         return body;
     }

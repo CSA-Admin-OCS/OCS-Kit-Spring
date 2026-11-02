@@ -223,6 +223,26 @@ class KitRoundTripPersistenceTest {
     }
 
     @Test
+    void aFreshDatabaseWithoutTheTablesUsesTheEnvironmentAndIsNotDegraded() {
+        org.springframework.jdbc.core.JdbcTemplate jdbc = beanFactory.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+        jdbc.execute("DROP TABLE active_kit");
+        jdbc.execute("DROP TABLE feature_override");
+
+        JpaFeatureOverrideStore fresh = beanFactory.createBean(JpaFeatureOverrideStore.class); // has not checked the tables yet
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("store", fresh);
+        KitFeatures f = new KitFeatures(KitCatalog.load(), "education", "", key -> null,
+                beans.getBeanProvider(FeatureOverrideStore.class), event -> { });
+        f.reloadOverrides();
+
+        assertFalse(f.isDegraded());
+        assertEquals("education", f.getKit());
+        assertEquals("env", f.kitSource());
+        assertEquals(0, kitRows.count()); // the tables exist again
+        assertEquals(0, overrideRows.count());
+    }
+
+    @Test
     void aFailureDuringApplyLeavesTheStoredStateUntouched() {
         features.applyOverrides(Map.of("calendar", true), "admin");
         ActiveKit invalid = new ActiveKit(null, "admin", null); // kit_id is NOT NULL

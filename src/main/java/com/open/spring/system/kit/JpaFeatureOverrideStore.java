@@ -59,6 +59,12 @@ public class JpaFeatureOverrideStore implements FeatureOverrideStore {
     }
 
     @Override
+    public void saveAll(List<FeatureOverride> overrides) {
+        ensureTables();
+        repository.saveAll(overrides); // one transaction
+    }
+
+    @Override
     public void delete(String featureId) {
         ensureTables();
         repository.deleteById(featureId);

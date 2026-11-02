@@ -10,6 +10,9 @@ public interface FeatureOverrideStore {
 
     void save(FeatureOverride override);
 
+    /** Atomically stores several overrides. */
+    void saveAll(List<FeatureOverride> overrides);
+
     void delete(String featureId);
 
     /** The kit an admin applied, if any. */
@@ -34,6 +37,11 @@ public interface FeatureOverrideStore {
         @Override
         public void save(FeatureOverride override) {
             rows.put(override.getFeatureId(), override);
+        }
+
+        @Override
+        public void saveAll(List<FeatureOverride> overrides) {
+            overrides.forEach(this::save);
         }
 
         @Override

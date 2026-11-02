@@ -3,6 +3,7 @@ package com.open.spring.system.kit;
 import java.security.Principal;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -70,6 +71,11 @@ public class KitApiController {
     public Map<String, Object> forgetKit(Principal principal) {
         features.forgetKit(principal.getName());
         return features.describeAdmin();
+    }
+
+    @ExceptionHandler(KitStateUnavailableException.class)
+    public ResponseEntity<Map<String, String>> unavailable(KitStateUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", e.getMessage()));
     }
 
     /** Handled here because the global advice answers 500 for its JSON cause. */
