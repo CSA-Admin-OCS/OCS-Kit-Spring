@@ -423,10 +423,18 @@ public class KitFeatures implements SmartInitializingSingleton {
 
     // ------------------------------------------------------------------ deferred startup tasks
 
-    /** Runs a feature's startup task now, or later when an admin enables the feature. */
-    public void runWhenEnabled(String featureId, String name, Task task) throws Exception {
+    /**
+     * Runs a feature's startup task now, or later when an admin enables the feature. A failing task
+     * is logged: one optional feature must not stop the site from booting, least of all after an
+     * admin enabled it, since they could then no longer reach the switch to undo it.
+     */
+    public void runWhenEnabled(String featureId, String name, Task task) {
         if (isEnabled(featureId)) {
-            task.run();
+            try {
+                task.run();
+            } catch (Exception e) {
+                log.warn("Startup task {} for feature '{}' failed: {}", name, featureId, e.getMessage());
+            }
             return;
         }
         log.info("Deferring startup task {}: feature '{}' is disabled", name, featureId);

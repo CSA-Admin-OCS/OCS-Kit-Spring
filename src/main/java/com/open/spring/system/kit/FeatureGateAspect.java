@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * comes from the declaring class's package (kits/catalog.json spring.packages), so new jobs
  * are gated without any per-feature code. Every run asks again, so jobs stop and resume with the
  * effective features. ApplicationReadyEvent listeners only get one chance, so a disabled one is
- * deferred until its feature is enabled.
+ * deferred until its feature is enabled, and one that fails is logged rather than stopping the site.
  */
 @Aspect
 @Component
@@ -43,8 +43,9 @@ public class FeatureGateAspect {
     @Around("@annotation(org.springframework.context.event.EventListener) && within(com.open.spring..*) && !within(com.open.spring.system..*)")
     public Object eventListener(ProceedingJoinPoint joinPoint) throws Throwable {
         Class<?> type = joinPoint.getSignature().getDeclaringType();
-        if (!features.isEnabledFor(type) && isStartupListener(joinPoint)) {
-            features.runWhenEnabled(features.featureFor(type),
+        String feature = features.featureFor(type);
+        if (feature != null && !KitCatalog.CORE.equals(feature) && isStartupListener(joinPoint)) {
+            features.runWhenEnabled(feature,
                     type.getSimpleName() + "." + joinPoint.getSignature().getName(), () -> proceedLater(joinPoint));
             return null;
         }

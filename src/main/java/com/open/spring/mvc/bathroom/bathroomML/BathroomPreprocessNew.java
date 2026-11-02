@@ -83,7 +83,8 @@ public class BathroomPreprocessNew {
         normalizeColumn(table, "PercentAbnormal");
 
         // Save to CSV
-        File outputFile = new File("bathroom_summary.csv");
+        File outputFile = new File("volumes/bathroom_summary.csv"); // volumes/ is the only writable folder in the image
+        outputFile.getParentFile().mkdirs();
         table.write().csv(outputFile);
     }
 

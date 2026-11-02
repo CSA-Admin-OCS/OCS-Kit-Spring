@@ -67,7 +67,8 @@ public class BathroomPreprocess {
         normalizeColumn(table, "Duration");
 
     //     // Save to CSV
-        File outputFile = new File("bathroom_cleaned.csv");
+        File outputFile = new File("volumes/bathroom_cleaned.csv"); // volumes/ is the only writable folder in the image
+        outputFile.getParentFile().mkdirs();
         table.write().csv(outputFile);
     //     System.out.println("Preprocessing done. File saved as bathroom_cleaned.csv!");
     }

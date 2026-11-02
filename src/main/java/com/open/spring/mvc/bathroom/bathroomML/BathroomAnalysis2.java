@@ -57,7 +57,7 @@ public class BathroomAnalysis2 {
 
         // Machine Learning: Predicting abnormal visits using J48 Decision Tree
         CSVLoader loader = new CSVLoader();
-        loader.setSource(new File("bathroom_cleaned.csv"));
+        loader.setSource(new File("volumes/bathroom_cleaned.csv"));
         Instances data = loader.getDataSet();
         data.setClassIndex(data.numAttributes() - 1); // Assuming "Abnormal" is the last column
 

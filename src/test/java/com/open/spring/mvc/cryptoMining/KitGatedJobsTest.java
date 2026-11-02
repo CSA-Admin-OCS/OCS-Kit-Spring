@@ -74,6 +74,28 @@ class KitGatedJobsTest {
     }
 
     @Test
+    void aFailingStartupListenerOfAnOptionalFeatureDoesNotStopTheSite() {
+        KitFeatures features = vanilla();
+        features.applyOverrides(java.util.Map.of("finance-sim", true), "admin");
+        Jobs failing = new Jobs() {
+            @Override
+            @EventListener(ApplicationReadyEvent.class)
+            public void onReady() {
+                ready++;
+                throw new IllegalStateException("cannot write");
+            }
+        };
+        AspectJProxyFactory factory = new AspectJProxyFactory(failing);
+        factory.addAspect(new FeatureGateAspect(features));
+        factory.setProxyTargetClass(true);
+        Jobs proxy = factory.getProxy();
+
+        proxy.onReady();
+
+        assertEquals(1, failing.ready);
+    }
+
+    @Test
     void aReadyListenerOfADisabledFeatureRunsOnceWhenItIsEnabled() {
         KitFeatures features = vanilla();
         Jobs jobs = gated(features);
