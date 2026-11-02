@@ -390,7 +390,7 @@ public class Person extends Submitter implements Comparable<Person> {
                         Map.entry("name", envOrDefault(dotenv, "MY_NAME", "My User")),
                         Map.entry("uid", envOrDefault(dotenv, "MY_UID", "myuser")),
                         Map.entry("email", envOrDefault(dotenv, "MY_EMAIL", "myuser@example.com")),
-                        Map.entry("password", defaultPassword),
+                        Map.entry("password", envOrDefault(dotenv, "MY_PASSWORD", defaultPassword)),
                         Map.entry("sid", envOrDefault(dotenv, "MY_SID", "9999993")),
                         Map.entry("pfp", "/images/default.png"),
                         Map.entry("kasmServerNeeded", true),
@@ -408,7 +408,13 @@ public class Person extends Submitter implements Comparable<Person> {
                         Map.entry("roles", Arrays.asList("ROLE_USER", "ROLE_STUDENT")),
                         Map.entry("stocks", "BTC,ETH")));
         // Iterate over the JSON-like list to create Person objects
+        // The optional extra admin exists only when MY_PASSWORD is set, so no admin shares DEFAULT_PASSWORD.
+        boolean seedMyUser = !envOrDefault(dotenv, "MY_PASSWORD", "").isEmpty();
+        String myUid = envOrDefault(dotenv, "MY_UID", "myuser");
         for (Map<String, Object> data : personData) {
+            if (!seedMyUser && myUid.equals(data.get("uid"))) {
+                continue;
+            }
             Person person = createPerson(
                     (String) data.get("name"),
                     (String) data.get("uid"),
