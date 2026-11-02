@@ -1,23 +1,7 @@
-.git
-.gitignore
-.env
-.env.*
-!.env.example
-target/
-volumes/
-logs/
-*.log
-*.db
-*.db-shm
-*.db-wal
-backups/
-uploads/
-.idea/
-.vscode/
-*.iml
-venv/
-__pycache__/
-*.pyc
-runner/
-deploy/
-docs/
+# Allowlist: the image is built from these paths only, so secrets, data and build output
+# can never enter the build context.
+**
+!pom.xml
+!mvnw
+!.mvn/**
+!src/main/**
