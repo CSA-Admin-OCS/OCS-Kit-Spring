@@ -5,6 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -75,6 +80,7 @@ class KitRoundTripPersistenceTest {
     @Autowired StatsRepository stats;
     @Autowired PersonJpaRepository people;
     @Autowired PersonRoleJpaRepository roles;
+    @Autowired com.open.spring.mvc.multiplayer.PlayerRepository playerRows;
 
     private final List<String> announced = new ArrayList<>();
 
@@ -177,6 +183,60 @@ class KitRoundTripPersistenceTest {
         assertEquals(staffRoles, roleNames("editor"));
         assertEquals("Teacher", features.authorityLabel("ROLE_TEACHER"));
         assertEquals(1, people.count()); // a switch creates no accounts
+    }
+
+    /** Every column of every account, so a changed password or token version counts too. */
+    private List<Map<String, Object>> personTable() {
+        return beanFactory.getBean(org.springframework.jdbc.core.JdbcTemplate.class)
+                .queryForList("SELECT * FROM person ORDER BY id");
+    }
+
+    /** vanilla -> each feature on -> education -> business -> reset, with the real deferred startup tasks. */
+    private void walkEveryRuntimeSeeder() throws Exception {
+        playerRows.deleteAll();
+        com.open.spring.mvc.multiplayer.PlayerInit players = beanFactory.createBean(com.open.spring.mvc.multiplayer.PlayerInit.class);
+        org.springframework.boot.CommandLineRunner playerRunner = ReflectionTestUtils.invokeMethod(players, "initGamers", playerRows);
+        org.springframework.boot.CommandLineRunner mining = beanFactory.createBean(com.open.spring.mvc.cryptoMining.DataInitializer.class);
+        features.runWhenEnabled("game-engine", "players", () -> playerRunner.run());
+        features.runWhenEnabled("finance-sim", "mining", () -> mining.run());
+
+        assertEquals(List.of("core"), features.getEnabled());
+        for (String feature : KitCatalog.load().features().keySet()) {
+            if (!"core".equals(feature)) {
+                features.applyOverrides(Map.of(feature, true), "admin");
+                assertTrue(features.isEnabled(feature));
+            }
+        }
+        assertTrue(playerRows.count() > 0, "the deferred task ran");
+        features.applyKit("education", "admin");
+        features.applyKit("business", "admin");
+        features.forgetKit("admin");
+        assertEquals("vanilla", features.getKit());
+    }
+
+    @Test
+    void noSeederOrDeferredTaskTouchesAccounts() throws Exception {
+        account("editor");
+        account("somebody");
+        List<Map<String, Object>> before = personTable();
+        assertEquals(2, before.size());
+
+        walkEveryRuntimeSeeder();
+
+        assertEquals(before, personTable());
+        verify(personDetailsService, never()).save(any());
+        verify(personDetailsService, never()).save(any(), any());
+        verifyNoInteractions(provisioner);
+    }
+
+    @Test
+    void noSeederCreatesAccountsEvenWhenThePersonTableIsEmpty() throws Exception {
+        walkEveryRuntimeSeeder();
+
+        assertEquals(List.of(), personTable());
+        verify(personDetailsService, never()).save(any());
+        verify(personDetailsService, never()).save(any(), any());
+        verifyNoInteractions(provisioner);
     }
 
     @Test
