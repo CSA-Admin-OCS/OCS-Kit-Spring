@@ -7,12 +7,14 @@ import java.nio.file.Paths;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class HardAssetUploadService {
 
-    private static final String UPLOAD_DIR = "./uploads/";
+    @Value("${kit.upload-dir:./uploads/}")
+    private String uploadDir = "./uploads/";
 
     public UploadResult upload(MultipartFile file, String uid) {
         if (file == null || file.isEmpty()) {
@@ -31,7 +33,7 @@ public class HardAssetUploadService {
 
     private Path ensureUploadDirectory() {
         try {
-            Path uploadPath = Paths.get(UPLOAD_DIR).toAbsolutePath().normalize();
+            Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }

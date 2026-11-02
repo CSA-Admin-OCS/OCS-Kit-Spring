@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,6 +31,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
 	@Autowired
 	private JwtTokenUtil jwtTokenUtil;
+
+	@Value("${jwt.cookie.name:" + CookieFactory.DEFAULT_JWT_COOKIE + "}")
+	private String jwtCookieName = CookieFactory.DEFAULT_JWT_COOKIE;
 
 	/**
 	 * This method is responsible for building a log message for the incoming HTTP request.
@@ -134,7 +138,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 		}
 	
 		return Arrays.stream(cookies)
-			.filter(cookie -> cookie.getName().equals("jwt_java_spring"))
+			.filter(cookie -> cookie.getName().equals(jwtCookieName))
 			.map(Cookie::getValue)
 			.findFirst();
 	}

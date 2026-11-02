@@ -15,7 +15,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class CookieFactory {
 
-    public static final String JWT_COOKIE = "jwt_java_spring";
+    public static final String DEFAULT_JWT_COOKIE = "jwt_java_spring";
+
+    /** JWT_TOKEN_NAME; change it (and SESSION_COOKIE_NAME) when another deployment shares the domain. */
+    @Value("${jwt.cookie.name:" + DEFAULT_JWT_COOKIE + "}")
+    private String jwtCookieName = DEFAULT_JWT_COOKIE;
 
     /** The JWT is only ever sent to the API chain, so it is scoped to /api. */
     private static final String JWT_PATH = "/api";
@@ -55,12 +59,12 @@ public class CookieFactory {
 
     /** Issued on successful authentication, by both /authenticate and MVC form login. */
     public ResponseCookie jwtCookie(String token) {
-        return base(JWT_COOKIE, token, JWT_PATH).maxAge(cookieMaxAge).build();
+        return base(jwtCookieName, token, JWT_PATH).maxAge(cookieMaxAge).build();
     }
 
     /** Removes the cookie issued by {@link #jwtCookie(String)} -- same name, domain and path. */
     public ResponseCookie expiredJwtCookie() {
-        return base(JWT_COOKIE, "", JWT_PATH).maxAge(0).build();
+        return base(jwtCookieName, "", JWT_PATH).maxAge(0).build();
     }
 
     /**
@@ -84,7 +88,7 @@ public class CookieFactory {
      * adds when COOKIE_DOMAIN is set.
      */
     public ResponseCookie expiredJwtHostOnlyCookie() {
-        return ResponseCookie.from(JWT_COOKIE, "")
+        return ResponseCookie.from(jwtCookieName, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .path(JWT_PATH)
@@ -99,7 +103,7 @@ public class CookieFactory {
      * for anyone still carrying one from that era.
      */
     public ResponseCookie expiredJwtLegacyLocalhostCookie() {
-        return ResponseCookie.from(JWT_COOKIE, "")
+        return ResponseCookie.from(jwtCookieName, "")
                 .httpOnly(true)
                 .secure(false)
                 .path(JWT_PATH)

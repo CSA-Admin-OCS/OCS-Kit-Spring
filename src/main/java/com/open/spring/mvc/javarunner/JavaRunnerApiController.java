@@ -20,6 +20,7 @@ public class JavaRunnerApiController {
     private final RestClient restClient;
     private final boolean isProduction;
     private final String runnerUrl;
+    private final boolean useRunner;
 
     public JavaRunnerApiController(RestClient.Builder builder, LocalJavaRunner localJavaRunner) {
         this.restClient = builder.build();
@@ -54,13 +55,23 @@ public class JavaRunnerApiController {
 
         this.runnerUrl = configuredRunnerUrl;
 
+        // The image has a JRE only (no javac): it sets CODE_RUNNER=remote, so even a local
+        // (IS_PRODUCTION=false) install compiles and runs in the code_runner container.
+        String runnerMode = System.getenv("CODE_RUNNER");
+
+        if (runnerMode == null) {
+                runnerMode = dotenv.get("CODE_RUNNER", "");
+        }
+
+        this.useRunner = isProduction || "remote".equalsIgnoreCase(runnerMode.trim());
+
     }
 
     @PostMapping("/java")
     public ResponseEntity<Map<String, String>> runJava(
             @RequestBody Map<String, String> body) {
 
-        if (isProduction) {
+        if (useRunner) {
             return runInDocker(body);
         }
 
