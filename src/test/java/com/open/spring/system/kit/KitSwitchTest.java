@@ -19,10 +19,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 /** Applying and forgetting a whole kit at runtime, against an in-memory store. */
 class KitSwitchTest {
 
-    private static final List<String> VANILLA = List.of("core");
+    private static final List<String> VANILLA = List.of("core", "events");
     private static final List<String> EDUCATION = List.of("core", "lessons", "code-runner", "assignments", "game-engine",
-            "ai-chatbot", "ai-grading", "social", "calendar", "analytics", "hallpass", "resume");
-    private static final List<String> BUSINESS = List.of("core", "ai-chatbot", "social", "calendar", "analytics", "resume");
+            "ai-chatbot", "ai-grading", "social", "calendar", "events", "analytics", "hallpass", "resume");
+    private static final List<String> BUSINESS = List.of("core", "ai-chatbot", "social", "calendar", "events", "analytics", "resume");
 
     private final KitCatalog catalog = KitCatalog.load();
     private final FeatureOverrideStore store = new FeatureOverrideStore.InMemory();
@@ -203,7 +203,7 @@ class KitSwitchTest {
         assertEquals("kit", restarted.source("finance-sim"));
 
         restarted.applyOverrides(Map.of("calendar", true), "admin");
-        assertEquals(List.of("core", "calendar"), restarted.getEnabled());
+        assertEquals(List.of("core", "calendar", "events"), restarted.getEnabled());
     }
 
     @Test
@@ -303,7 +303,7 @@ class KitSwitchTest {
         assertTrue(events.isEmpty());
 
         f.forgetKit("admin");
-        assertEquals(BUSINESS.size() - 1, events.size());
+        assertEquals(BUSINESS.size() - VANILLA.size(), events.size());
     }
 
     @Test

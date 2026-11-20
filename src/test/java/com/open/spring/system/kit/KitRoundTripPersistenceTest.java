@@ -161,7 +161,7 @@ class KitRoundTripPersistenceTest {
         features.applyKit("business", "admin");
         assertFalse(features.isEnabled("assignments"));
         features.applyKit("vanilla", "admin");
-        assertEquals(List.of("core"), features.getEnabled());
+        assertEquals(List.of("core", "events"), features.getEnabled());
         assertEquals(seededAssignments, assignments.count());
         assertEquals(seededStats, stats.count());
         assertEquals(seededJokes + 1, jokes.count());
@@ -200,7 +200,7 @@ class KitRoundTripPersistenceTest {
         features.runWhenEnabled("game-engine", "players", () -> playerRunner.run());
         features.runWhenEnabled("finance-sim", "mining", () -> mining.run());
 
-        assertEquals(List.of("core"), features.getEnabled());
+        assertEquals(List.of("core", "events"), features.getEnabled());
         for (String feature : KitCatalog.load().features().keySet()) {
             if (!"core".equals(feature)) {
                 features.applyOverrides(Map.of(feature, true), "admin");

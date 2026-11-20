@@ -25,7 +25,7 @@ class KitResolverTest {
     void vanillaIsCoreOnly() {
         KitResolver.Resolution r = KitResolver.resolve(catalog, "Vanilla", "");
         assertEquals("vanilla", r.kit());
-        assertEquals(List.of("core"), r.enabled());
+        assertEquals(List.of("core", "events"), r.enabled());
     }
 
     @Test

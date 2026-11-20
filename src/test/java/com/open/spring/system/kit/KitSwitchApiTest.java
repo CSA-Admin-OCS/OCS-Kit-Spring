@@ -153,7 +153,7 @@ class KitSwitchApiTest {
                 .andExpect(jsonPath("$.kit_source").value("env"))
                 .andExpect(jsonPath("$.customized").value(false))
                 .andExpect(jsonPath("$.roles.staff.label").value("Editor"))
-                .andExpect(jsonPath("$.features.length()").value(1));
+                .andExpect(jsonPath("$.features.length()").value(2));
     }
 
     @Test
